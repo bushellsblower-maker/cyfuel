@@ -34,10 +34,14 @@ npm run build
 - Petrol, premium, diesel, premium diesel, and LPG when a source publishes it.
 - Pump prices in the local currency. Totals can be compared in the currency under your pin, or in another currency via OpenVan's euro rates.
 - Prices that were published per gallon are converted to per litre for the maths, and the original unit is still mentioned.
+- A Metric / Imperial toggle for the tank and thirst. Imperial is **UK**: imperial gallons and UK mpg (not US mpg). The efficient-fill maths stays in litres and L/100km.
+- “What do you drive?” asks Workers AI (`@cf/meta/llama-3.1-8b-instruct-fp8` on the `AI` binding) for a usable tank and, when it knows, a combined L/100km. The Worker checks the JSON before the page trusts it.
 
 ## Data sources
 
-All upstream calls go through the Worker (`/api/prices`, `/api/rates`, `/api/stations`) so caching and CORS stay in one place. Responses are stored with the Cache API (about 6 hours for country prices and rates, 15 minutes for stations). No KV namespace is required.
+All upstream calls go through the Worker (`/api/prices`, `/api/rates`, `/api/stations`, `POST /api/car-tank`) so caching and CORS stay in one place. Responses are stored with the Cache API (about 6 hours for country prices and rates, 15 minutes for stations, a day for a repeated car lookup). No KV namespace is required.
+
+`POST /api/car-tank` uses the Workers AI binding. That spends Cloudflare account neurons (the free tier / included allocation on a typical account). There is no separate paid model key and no third-party LLM.
 
 | What | Source | Licence / credit |
 | --- | --- | --- |
@@ -48,6 +52,7 @@ All upstream calls go through the Worker (`/api/prices`, `/api/rates`, `/api/sta
 | Country shapes | [world-atlas](https://github.com/topojson/world-atlas) (Natural Earth 110m) | Natural Earth is public domain |
 | Capitals | Natural Earth populated places | Public domain |
 | Tiles | [OpenStreetMap standard tiles](https://tile.openstreetmap.org) | © OpenStreetMap contributors — [copyright](https://www.openstreetmap.org/copyright). No API key. These are the community servers, so keep traffic modest. |
+| Car tank guess | Workers AI `@cf/meta/llama-3.1-8b-instruct-fp8` | Account neurons via the `AI` binding. Not a measured tank — Pip is guessing from the name. |
 
 Australia outside Western Australia, and most other countries, only have a national average. The map says so.
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FuelId } from "../../shared/types";
+import type { UnitSystem } from "../../shared/units";
 
 export const SCOPES = [
   { id: "5", label: "5 km" },
@@ -21,6 +22,8 @@ export type Settings = {
   colourByPrice: boolean;
   /** "standing" ranks in the currency of the country under the pin. */
   compareCurrency: string;
+  /** Display units. Ranking still uses litres and L/100km. Imperial means UK gallons and UK mpg. */
+  units: UnitSystem;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scope: "15",
   colourByPrice: true,
   compareCurrency: "standing",
+  units: "metric",
 };
 
 /** Kilometres to ask the station API for. World scope does not fetch pumps. */
@@ -63,6 +67,7 @@ export function usePreferences(): {
       scope: saved.scope,
       colourByPrice: saved.colourByPrice,
       compareCurrency: saved.compareCurrency,
+      units: saved.units,
     }),
     [saved],
   );
@@ -93,6 +98,7 @@ function sanitize(value: Saved & { radiusKm?: number }): Saved {
     roundTrip: Boolean(value.roundTrip),
     scope: normalizeScope(value.scope, value.radiusKm),
     colourByPrice: value.colourByPrice !== false,
+    units: value.units === "imperial" ? "imperial" : "metric",
     compareCurrency:
       value.compareCurrency === "standing" || /^[A-Z]{3}$/.test(value.compareCurrency)
         ? value.compareCurrency

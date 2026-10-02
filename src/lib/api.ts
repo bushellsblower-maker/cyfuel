@@ -1,3 +1,4 @@
+import type { CarTankEstimate } from "../../shared/carTank";
 import type { PricesPayload, RatesPayload, StationsPayload } from "../../shared/types";
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -29,4 +30,22 @@ export function getStations(
     radiusKm: String(Math.round(radiusKm)),
   });
   return getJson(`/api/stations?${query.toString()}`, signal);
+}
+
+export function lookupCar(car: string, signal?: AbortSignal): Promise<CarTankEstimate> {
+  return postJson("/api/car-tank", { car }, signal);
+}
+
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.error || "Pip dropped the brochure. The tank slider still works.");
+  }
+  return payload;
 }
