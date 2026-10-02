@@ -1,4 +1,4 @@
-import { cleanCarQuery, parseCarTank } from "../shared/carTank";
+import { BROCHURE_NOTE, cleanCarQuery, knownCarTank, parseCarTank } from "../shared/carTank";
 import { regionsNear, type RegionId } from "../shared/coverage";
 import { haversineKm } from "../shared/geo";
 import { normalizePrices, normalizeRates } from "../shared/normalize";
@@ -113,43 +113,55 @@ async function lookupCarTank(request: Request, env: Env, ctx: ExecutionContext):
 
   const started = Date.now();
   let abandoned = false;
-  const pending = env.AI.run(CAR_MODEL, {
-    messages: [
-      {
-        role: "system",
-        content: "You reply with one JSON object and nothing else.",
+
+  const runOnce = (strict: boolean) => {
+    const remaining = AI_TIMEOUT_MS - (Date.now() - started);
+    if (remaining <= 0) return Promise.reject(new AiTookTooLong());
+    const pending = env.AI.run(CAR_MODEL, {
+      messages: strict ? strictCarMessages(car) : carMessages(car),
+      max_tokens: 180,
+      temperature: 0,
+    }).then(
+      (value) => value,
+      (error: unknown) => {
+        if (abandoned) return null;
+        throw error;
       },
-      {
-        role: "user",
-        content: [
-          "Estimate the usable fuel tank and typical combined consumption for this car.",
-          'JSON only: {"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
-          "tankLitres is litres, not gallons. efficiencyLPer100km is combined L/100km, or null if unsure.",
-          "notes is one short sentence.",
-          `Car: ${car}`,
-        ].join("\n"),
-      },
-    ],
-    max_tokens: 180,
-    temperature: 0,
-  }).then(
-    (value) => value,
-    (error: unknown) => {
-      if (abandoned) return null;
-      throw error;
-    },
-  );
+    );
+    return withDeadline(pending, remaining);
+  };
 
   try {
-    const output = await withDeadline(pending, AI_TIMEOUT_MS);
+    let text = modelText(await runOnce(false));
+    let estimate = parseCarTank(text);
+    if (!estimate && AI_TIMEOUT_MS - (Date.now() - started) > 800) {
+      const retry = modelText(await runOnce(true));
+      if (retry) text = retry;
+      estimate = parseCarTank(retry);
+    }
     const durationMs = Date.now() - started;
-    const text = output && typeof output.response === "string" ? output.response : "";
-    const estimate = parseCarTank(text);
     if (!estimate) {
-      console.log(JSON.stringify({ event: "car_ai_bad_json", model: CAR_MODEL, durationMs }));
+      console.log(
+        JSON.stringify({
+          event: "car_ai_bad_json",
+          model: CAR_MODEL,
+          durationMs,
+          sample: text.replace(/\s+/g, " ").trim().slice(0, 200),
+        }),
+      );
+      estimate = knownCarTank(car);
+    }
+    if (!estimate) {
       return json({ error: "Pip stared at the brochure and learned nothing. Type the tank yourself." }, 502, 0);
     }
-    console.log(JSON.stringify({ event: "car_ai_ok", model: CAR_MODEL, durationMs }));
+    console.log(
+      JSON.stringify({
+        event: "car_ai_ok",
+        model: CAR_MODEL,
+        durationMs,
+        source: estimate.notes === BROCHURE_NOTE ? "brochure" : "model",
+      }),
+    );
     const response = json(estimate, 200, 0);
     response.headers.set("X-Cyfuel-Cache", "MISS");
     if (cache) ctx.waitUntil(
@@ -189,6 +201,41 @@ class AiTookTooLong extends Error {
     super("ai_timeout");
     this.name = "AiTookTooLong";
   }
+}
+
+function carMessages(car: string): Array<{ role: "system" | "user"; content: string }> {
+  return [
+    { role: "system", content: "You reply with one JSON object and nothing else." },
+    {
+      role: "user",
+      content: [
+        "Estimate the usable fuel tank and typical combined consumption for this car.",
+        'JSON only: {"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
+        "tankLitres is litres, not gallons. efficiencyLPer100km is combined L/100km, or null if unsure.",
+        "notes is one short sentence.",
+        `Car: ${car}`,
+      ].join("\n"),
+    },
+  ];
+}
+
+function strictCarMessages(car: string): Array<{ role: "system" | "user"; content: string }> {
+  return [
+    { role: "system", content: "JSON only. No markdown fences. No explanation." },
+    {
+      role: "user",
+      content: [
+        "Reply with one JSON object and nothing else. No markdown. No prose.",
+        '{"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
+        "tankLitres is litres. efficiencyLPer100km is combined L/100km, or null if unsure.",
+        `Car: ${car}`,
+      ].join("\n"),
+    },
+  ];
+}
+
+function modelText(output: { response?: string } | null): string {
+  return output && typeof output.response === "string" ? output.response : "";
 }
 
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {

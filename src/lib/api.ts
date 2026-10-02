@@ -35,18 +35,50 @@ export function getStations(
 export const LOOKUP_TIMEOUT_MS = 15_000;
 export const LOOKUP_TOO_SLOW = "Pip took too long — try again or set the tank yourself";
 
+export type LookupFailureCode = "bad reply" | "too slow" | "rate limited" | "network";
+
+export class LookupFailed extends Error {
+  code: LookupFailureCode;
+  constructor(message: string, code: LookupFailureCode) {
+    super(message);
+    this.name = "LookupFailed";
+    this.code = code;
+  }
+}
+
+export function lookupFailureCode(status: number | null, aborted: boolean): LookupFailureCode {
+  if (aborted || status === 504) return "too slow";
+  if (status === 429) return "rate limited";
+  if (status == null) return "network";
+  return "bad reply";
+}
+
 export async function lookupCar(car: string, signal?: AbortSignal): Promise<CarTankEstimate> {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), LOOKUP_TIMEOUT_MS);
-  const combined = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
+  const combined = signal ? combineSignals([signal, timeout.signal]) : timeout.signal;
   try {
     return await raceAbort(postJson("/api/car-tank", { car }, combined), combined);
   } catch (error) {
-    if (combined.aborted || isAbortError(error)) throw new Error(LOOKUP_TOO_SLOW);
+    if (combined.aborted || isAbortError(error)) throw new LookupFailed(LOOKUP_TOO_SLOW, "too slow");
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+function combineSignals(signals: AbortSignal[]): AbortSignal {
+  const any = (AbortSignal as { any?: (inputs: AbortSignal[]) => AbortSignal }).any;
+  if (typeof any === "function") return any.call(AbortSignal, signals);
+  const controller = new AbortController();
+  for (const input of signals) {
+    if (input.aborted) {
+      controller.abort();
+      return controller.signal;
+    }
+    input.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  return controller.signal;
 }
 
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -78,15 +110,24 @@ function isAbortError(error: unknown): boolean {
 }
 
 async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
-    method: "POST",
-    signal,
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      signal,
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) throw error;
+    throw new LookupFailed("Pip couldn't reach the brochure. The tank slider still works.", "network");
+  }
   const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!response.ok || !payload) {
-    throw new Error(payload?.error || "Pip dropped the brochure. The tank slider still works.");
+    throw new LookupFailed(
+      payload?.error || "Pip dropped the brochure. The tank slider still works.",
+      lookupFailureCode(response.status, false),
+    );
   }
   return payload;
 }

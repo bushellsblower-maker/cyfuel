@@ -135,6 +135,39 @@ a { color: var(--sea); }
   background: #fff;
 }
 .car-form .btn:disabled { opacity: 0.6; cursor: progress; }
+.car-status { margin: 0; min-height: 1.35em; font-size: 0.86rem; font-weight: 800; line-height: 1.35; }
+.car-status.is-ok { color: var(--leaf); }
+.car-status.is-err { color: var(--ouch); }
+.car-code {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+.car-bar {
+  display: block;
+  height: 8px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+}
+.car-bar::before {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--sun);
+  animation: car-slide 1s ease-in-out infinite;
+}
+@keyframes car-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
 .sheet.is-plain .badge { background: #fff6e8; }
 .sheet.is-plain .rank-no { background: var(--sun); }
 

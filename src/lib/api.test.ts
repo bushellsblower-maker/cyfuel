@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LOOKUP_TIMEOUT_MS, LOOKUP_TOO_SLOW, lookupCar } from "./api";
+import { LOOKUP_TIMEOUT_MS, LOOKUP_TOO_SLOW, LookupFailed, lookupCar, lookupFailureCode } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -34,6 +34,42 @@ describe("lookupCar", () => {
         ),
     );
     await expect(lookupCar("Golf")).resolves.toMatchObject({ tankLitres: 45, efficiencyLPer100km: 6 });
+  });
+
+  it("labels a bad reply, a slow reply, and a missing AbortSignal.any", async () => {
+    expect(lookupFailureCode(502, false)).toBe("bad reply");
+    expect(lookupFailureCode(504, false)).toBe("too slow");
+    expect(lookupFailureCode(429, false)).toBe("rate limited");
+    expect(lookupFailureCode(null, false)).toBe("network");
+
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(JSON.stringify({ error: "Pip stared at the brochure and learned nothing." }), {
+          status: 502,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await expect(lookupCar("Zorblax")).rejects.toMatchObject({
+      message: "Pip stared at the brochure and learned nothing.",
+      code: "bad reply",
+    } satisfies Partial<LookupFailed>);
+
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, "any");
+    Object.defineProperty(AbortSignal, "any", { value: undefined, configurable: true });
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(JSON.stringify({ tankLitres: 40, efficiencyLPer100km: 5, confidence: "medium", notes: "ok" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    try {
+      await expect(lookupCar("Polo")).resolves.toMatchObject({ tankLitres: 40 });
+    } finally {
+      if (descriptor) Object.defineProperty(AbortSignal, "any", descriptor);
+    }
   });
 
   it("passes a worker timeout message through", async () => {
