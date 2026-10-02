@@ -37,3 +37,49 @@ export function formatThirst(litresPer100km: number, units: UnitSystem): string 
   if (units === "imperial") return `${Math.round(lPer100kmToUkMpg(litresPer100km))} mpg`;
   return `${litresPer100km.toFixed(1)} L/100km`;
 }
+
+/** Same band the efficient-fill maths will accept. Imperial mpg is the UK figure for those litres. */
+export const THIRST_L_MIN = 2;
+export const THIRST_L_MAX = 25;
+
+export function thirstBounds(units: UnitSystem): { min: number; max: number; step: number } {
+  if (units === "imperial") {
+    return {
+      min: Math.floor(lPer100kmToUkMpg(THIRST_L_MAX)),
+      max: Math.floor(lPer100kmToUkMpg(THIRST_L_MIN)),
+      step: 1,
+    };
+  }
+  return { min: THIRST_L_MIN, max: THIRST_L_MAX, step: 0.1 };
+}
+
+export function thirstFieldText(litresPer100km: number, units: UnitSystem): string {
+  if (units === "imperial") return String(Math.round(lPer100kmToUkMpg(litresPer100km)));
+  return (Math.round(litresPer100km * 10) / 10).toFixed(1);
+}
+
+/** A finished in-range number, or null while the user is still typing. */
+export function litresFromThirstDraft(raw: string, units: UnitSystem): number | null {
+  const trimmed = raw.trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  const bounds = thirstBounds(units);
+  if (value < bounds.min || value > bounds.max) return null;
+  return litresFromThirstNumber(value, units);
+}
+
+/** Clamp a finished draft into range. Null when it is not a number yet. */
+export function clampThirstDraft(raw: string, units: UnitSystem): number | null {
+  const trimmed = raw.trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) return null;
+  const bounds = thirstBounds(units);
+  const clamped = Math.min(bounds.max, Math.max(bounds.min, value));
+  return litresFromThirstNumber(clamped, units);
+}
+
+function litresFromThirstNumber(value: number, units: UnitSystem): number {
+  const litres = units === "imperial" ? ukMpgToLPer100km(value) : value;
+  return Math.min(THIRST_L_MAX, Math.max(THIRST_L_MIN, litres));
+}
