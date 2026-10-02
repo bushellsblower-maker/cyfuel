@@ -33,7 +33,9 @@ type Props = {
   onCountry: (code: string) => void;
 };
 
-const TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+// Community OSM tiles. No API key. The browser sends its own User-Agent;
+// do not proxy these or the Worker becomes a tile CDN.
+const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 export function MapView(props: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -58,10 +60,9 @@ export function MapView(props: Props) {
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.tileLayer(TILES, {
-      subdomains: "abcd",
-      maxZoom: 20,
+      maxZoom: 19,
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     map.setView([22, 8], 2);
     map.on("click", (event) => {
@@ -79,7 +80,11 @@ export function MapView(props: Props) {
   }, []);
 
   useEffect(() => {
-    mapRef.current?.invalidateSize();
+    const map = mapRef.current;
+    if (!map) return;
+    map.invalidateSize();
+    const timer = window.setTimeout(() => map.invalidateSize(), 60);
+    return () => window.clearTimeout(timer);
   }, [props.layoutKey]);
 
   useEffect(() => {
