@@ -34,7 +34,7 @@ npm run build
 - Petrol, premium, diesel, premium diesel, and LPG when a source publishes it.
 - A display currency on Fuel & tank (and in the tank notebook). It starts as the currency of the country under you, and stays on whatever you pick. Station prices, totals, and country averages are shown in that currency using OpenVan's free euro rates. A pump's own sticker is still mentioned when it differs.
 - Prices that were published per gallon are converted to per litre for the maths, and the original unit is still mentioned.
-- A Metric / Imperial toggle for the tank and thirst. Imperial is **UK**: imperial gallons and UK mpg (not US mpg). The efficient-fill maths stays in litres and L/100km.
+- A Metric / Imperial toggle for the tank and thirst. Imperial is **UK**: imperial gallons and UK mpg (not US mpg). Type the thirst in the current units (mpg or L/100km); the notebook slider follows that number. The efficient-fill maths stays in litres and L/100km.
 - “What do you drive?” asks Workers AI (`@cf/meta/llama-3.2-3b-instruct` on the `AI` binding) for a usable tank and, when it knows, a combined L/100km. The Worker strips markdown, retries once if the reply is not JSON, and falls back to a list of common cars (Golf, Focus, Civic, Saab, Astra, and so on, ignoring a leading year) when the model still waffles. A status line under the box stays on screen for success or the exact error. The Worker gives up after 12 seconds, and the page gives up after 15.
 
 ## Data sources

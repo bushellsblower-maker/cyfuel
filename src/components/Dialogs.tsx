@@ -3,7 +3,8 @@ import { CITIES } from "../data/cities";
 import { COMPARE_CURRENCIES } from "../lib/currencies";
 import { currencyLabel } from "../lib/format";
 import type { Settings } from "../lib/settings";
-import { lPer100kmToUkMpg, litresToUkGallons, ukGallonsToLitres, ukMpgToLPer100km } from "../../shared/units";
+import { ThirstEditor } from "./ThirstEditor";
+import { litresToUkGallons, ukGallonsToLitres } from "../../shared/units";
 
 export function Modal({
   open,
@@ -51,7 +52,6 @@ export function SettingsDialog({
 }) {
   const imperial = settings.units === "imperial";
   const gallons = Number(litresToUkGallons(settings.tankLitres).toFixed(1));
-  const mpg = Math.round(lPer100kmToUkMpg(settings.litresPer100km));
   return (
     <Modal open={open} title="The tank's little notebook" onClose={onClose}>
       <p className="modal-lead">
@@ -81,28 +81,12 @@ export function SettingsDialog({
           />
         )}
       </label>
-      <label className="field">
-        <span>{imperial ? `Thirst (mpg) · ${mpg} UK` : `Thirst (L/100km) · ${settings.litresPer100km.toFixed(1)}`}</span>
-        {imperial ? (
-          <input
-            type="range"
-            min={15}
-            max={90}
-            step={1}
-            value={mpg}
-            onChange={(event) => onChange({ litresPer100km: ukMpgToLPer100km(Number(event.target.value)) })}
-          />
-        ) : (
-          <input
-            type="range"
-            min={3}
-            max={18}
-            step={0.1}
-            value={settings.litresPer100km}
-            onChange={(event) => onChange({ litresPer100km: Number(event.target.value) })}
-          />
-        )}
-      </label>
+      <ThirstEditor
+        litresPer100km={settings.litresPer100km}
+        units={settings.units}
+        showSlider
+        onLitresPer100km={(litresPer100km) => onChange({ litresPer100km })}
+      />
       <p className="field-help">
         How far to look is the scope row beside the fuels: 5, 15 or 50 km around the pin, the country under you, or the
         whole world.

@@ -6,6 +6,7 @@ import type { PricesPayload, RankMode, RatesPayload, StationsPayload } from "../
 import { formatTank, formatThirst } from "../shared/units";
 import { APP_VERSION } from "../shared/version";
 import { CityDialog, SettingsDialog } from "./components/Dialogs";
+import { ThirstEditor } from "./components/ThirstEditor";
 import { MapView, type MapOrigin } from "./components/MapView";
 import { Mascot } from "./components/Mascot";
 import { Sheet } from "./components/Sheet";
@@ -201,6 +202,19 @@ export function App() {
       ? { lat: here.pin.lat, lon: here.pin.lon, label: `${here.pin.place} · national average, not a pump` }
       : null;
 
+  function clearFresh(): void {
+    setTankFresh(false);
+    if (flashTimer.current != null) {
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = null;
+    }
+  }
+
+  function editThirst(litresPer100km: number): void {
+    clearFresh();
+    setSettings({ litresPer100km });
+  }
+
   function lookupDrive(event: FormEvent): void {
     event.preventDefault();
     const car = carQuery.trim();
@@ -341,6 +355,11 @@ export function App() {
               ))}
             </select>
           </label>
+          <ThirstEditor
+            litresPer100km={settings.litresPer100km}
+            units={settings.units}
+            onLitresPer100km={editThirst}
+          />
           <p className={`unit-note${tankFresh ? " is-fresh" : ""}`}>
             {settings.units === "imperial" ? "Tank (gal)" : "Tank (L)"} {formatTank(settings.tankLitres, settings.units)}
             {" · "}
@@ -539,7 +558,10 @@ export function App() {
         open={settingsOpen}
         settings={settings}
         onClose={() => setSettingsOpen(false)}
-        onChange={setSettings}
+        onChange={(patch) => {
+          if ("litresPer100km" in patch || "tankLitres" in patch) clearFresh();
+          setSettings(patch);
+        }}
       />
       <CityDialog
         open={cityOpen}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { haversineKm } from "../../shared/geo";
 import type { FuelId, LatLng } from "../../shared/types";
-import type { UnitSystem } from "../../shared/units";
+import { THIRST_L_MAX, THIRST_L_MIN, type UnitSystem } from "../../shared/units";
 
 export const SCOPES = [
   { id: "5", label: "5 km" },
@@ -105,7 +105,7 @@ function sanitize(value: Saved & { radiusKm?: number }): Saved {
   const fuels: FuelId[] = ["petrol", "premium", "diesel", "dieselPlus", "lpg"];
   return {
     tankLitres: clamp(value.tankLitres, 10, 150),
-    litresPer100km: clamp(value.litresPer100km, 2, 25),
+    litresPer100km: clamp(value.litresPer100km, THIRST_L_MIN, THIRST_L_MAX),
     roundTrip: Boolean(value.roundTrip),
     scope: normalizeScope(value.scope, value.radiusKm),
     colourByPrice: value.colourByPrice !== false,
