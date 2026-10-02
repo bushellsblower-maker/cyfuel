@@ -27,7 +27,8 @@ npm run build
 
 ## What you get
 
-- Leaflet map with OpenStreetMap standard tiles (no API key), cartoon pump markers, and a world choropleth of national averages (coloured in EUR per litre, scale trimmed to the middle 80% so one wild price does not paint the planet one colour).
+- Leaflet map with OpenStreetMap standard tiles (no API key), cartoon pump markers, and a world choropleth of national averages (coloured in EUR per litre, scale trimmed to the middle 80% so one wild price does not paint the planet one colour). **Colour by price** is on by default and can be switched off; the map and list then use one cartoon colour.
+- Scope chips: 5 km, 15 km, 50 km, country, or world. A local radius ranks nearby pumps and hides the world choropleth. Country and world keep national averages. Country station pins are the ones we can fetch within 80 km that still sit in that country.
 - Browser geolocation, with a city list or a dropped pin if permission is denied.
 - Real forecourts where an open feed exists. Everywhere else, a capital pin labelled as a **national average — not a pump**.
 - Petrol, premium, diesel, premium diesel, and LPG when a source publishes it.

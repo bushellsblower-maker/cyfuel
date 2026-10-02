@@ -11,12 +11,17 @@ export function mascotLine(input: {
   homeName: string | null;
   compareCurrency: string;
   fuelLabel: string;
+  scope: "5" | "15" | "50" | "country" | "world";
 }): { mood: Mood; line: string } {
   if (input.booting) {
     return { mood: "pump", line: "Hold my nozzle. I'm inhaling a planet's worth of price lists." };
   }
   if (!input.hasOrigin) {
     return { mood: "wave", line: "Pop me somewhere. I promise not to judge the car." };
+  }
+  if (input.scope === "world") {
+    const where = input.homeName ? `${input.homeName} is a national average` : "National averages";
+    return { mood: "wave", line: `${where}. Pick 5, 15 or 50 km when you want actual nozzles.` };
   }
   if (input.loading) {
     return { mood: "pump", line: "Pumping nearby prices… the hose is doing its best." };

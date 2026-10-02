@@ -69,7 +69,7 @@ a { color: var(--sea); }
 }
 .top-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.btn, .modes button, .fuelbar button {
+.btn, .modes button, .fuelbar button, .scopebar button {
   border: 3px solid var(--ink);
   background: #fff;
   border-radius: 999px;
@@ -77,9 +77,9 @@ a { color: var(--sea); }
   font-weight: 800;
   padding: 8px 12px;
 }
-.btn:hover, .modes button:hover, .fuelbar button:hover { transform: translate(-1px, -1px); }
-.btn:active, .modes button:active, .fuelbar button:active { transform: translate(1px, 1px); box-shadow: none; }
-.btn.is-on, .modes button.is-on, .fuelbar button.is-on, .modes button[aria-selected="true"] {
+.btn:hover, .modes button:hover, .fuelbar button:hover, .scopebar button:hover { transform: translate(-1px, -1px); }
+.btn:active, .modes button:active, .fuelbar button:active, .scopebar button:active { transform: translate(1px, 1px); box-shadow: none; }
+.btn.is-on, .modes button.is-on, .fuelbar button.is-on, .scopebar button.is-on, .modes button[aria-selected="true"] {
   background: var(--sun);
 }
 .btn-small { padding: 4px 10px; box-shadow: 2px 2px 0 var(--ink); }
@@ -115,6 +115,10 @@ a { color: var(--sea); }
 .fold:not([open]) .fold-state::after { content: "Show"; }
 .fold-body { padding: 0 12px 12px; }
 .controls-body { display: grid; gap: 8px; }
+.scopebar { display: flex; flex-wrap: wrap; gap: 6px; }
+.scopebar button { white-space: nowrap; }
+.sheet.is-plain .badge { background: #fff6e8; }
+.sheet.is-plain .rank-no { background: var(--sun); }
 
 .fuelbar {
   display: flex;

@@ -97,17 +97,10 @@ export function SettingsDialog({
           onChange={(event) => onChange({ litresPer100km: Number(event.target.value) })}
         />
       </label>
-      <label className="field">
-        <span>Search radius · {settings.radiusKm.toFixed(0)} km</span>
-        <input
-          type="range"
-          min={3}
-          max={60}
-          step={1}
-          value={settings.radiusKm}
-          onChange={(event) => onChange({ radiusKm: Number(event.target.value) })}
-        />
-      </label>
+      <p className="field-help">
+        How far to look is the scope row beside the fuels: 5, 15 or 50 km around the pin, the country under you, or the
+        whole world.
+      </p>
       <button
         type="button"
         className={`btn${settings.roundTrip ? " is-on" : ""}`}

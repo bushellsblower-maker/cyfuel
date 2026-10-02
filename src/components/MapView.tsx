@@ -6,6 +6,7 @@ import { convert } from "../../shared/money";
 import type { CountryPrice } from "../../shared/types";
 import { priceColor, scaleDomain } from "../lib/color";
 import type { CountryShape } from "../lib/country";
+import type { Scope } from "../lib/settings";
 import { escapeHtml, formatUnit } from "../lib/format";
 
 export type MapOrigin = {
@@ -27,6 +28,9 @@ type Props = {
   pinMode: boolean;
   reducedMotion: boolean;
   compareCurrency: string;
+  scope: Scope;
+  colourByPrice: boolean;
+  focusCode: string | null;
   layoutKey: string;
   onSelect: (id: string) => void;
   onDrop: (lat: number, lon: number) => void;
@@ -45,7 +49,9 @@ export function MapView(props: Props) {
   const onDropRef = useRef(props.onDrop);
   const onCountryRef = useRef(props.onCountry);
   const onSelectRef = useRef(props.onSelect);
+  const scopeRef = useRef(props.scope);
   pinModeRef.current = props.pinMode;
+  scopeRef.current = props.scope;
   onDropRef.current = props.onDrop;
   onCountryRef.current = props.onCountry;
   onSelectRef.current = props.onSelect;
@@ -69,7 +75,10 @@ export function MapView(props: Props) {
       if (!pinModeRef.current) return;
       onDropRef.current(event.latlng.lat, event.latlng.lng);
     });
-    map.on("zoomend", () => syncDots(map, dotsRef.current));
+    map.on("zoomend", () => {
+      if (scopeRef.current !== "world") return;
+      syncDots(map, dotsRef.current);
+    });
     mapRef.current = map;
     const timer = window.setTimeout(() => map.invalidateSize(), 50);
     return () => {
@@ -90,12 +99,17 @@ export function MapView(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (props.scope !== "world" && props.scope !== "country") return;
     const prices = eurPrices(props.countries, props.rates, props.fuel);
     const domain = scaleDomain([...prices.values()]);
-    const byCode = new Map(props.shapes.map((shape) => [shape.code, shape]));
+    const visible =
+      props.scope === "country" && props.focusCode
+        ? props.shapes.filter((shape) => shape.code === props.focusCode)
+        : props.shapes;
+    const byCode = new Map(visible.map((shape) => [shape.code, shape]));
     const collection: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: props.shapes.map((shape) => ({
+      features: visible.map((shape) => ({
         type: "Feature",
         id: shape.code,
         geometry: shape.feature.geometry,
@@ -106,11 +120,8 @@ export function MapView(props: Props) {
       style: (feature) => {
         const code = String(feature?.properties?.code ?? "");
         const price = prices.get(code);
-        if (price == null || !domain) {
-          return { color: "#24170f", weight: 0.7, fillColor: "#e4d8c8", fillOpacity: 0.45 };
-        }
-        const t = (price - domain.lo) / (domain.hi - domain.lo);
-        return { color: "#24170f", weight: 0.7, fillColor: priceColor(t), fillOpacity: 0.62 };
+        const fill = countryFill(price, domain, props.colourByPrice);
+        return { color: "#24170f", weight: 0.7, fillColor: fill, fillOpacity: props.colourByPrice ? 0.62 : 0.4 };
       },
       onEachFeature: (feature, leafletLayer) => {
         const code = String(feature.properties?.code ?? "");
@@ -129,38 +140,55 @@ export function MapView(props: Props) {
     }).addTo(map);
 
     const dots = L.layerGroup();
-    for (const shape of props.shapes) {
+    for (const shape of visible) {
       const price = prices.get(shape.code);
-      if (price == null || !domain) continue;
-      const t = (price - domain.lo) / (domain.hi - domain.lo);
+      if (price == null) continue;
       L.circleMarker([shape.pin.lat, shape.pin.lon], {
         radius: 4,
         color: "#24170f",
         weight: 1,
-        fillColor: priceColor(t),
+        fillColor: countryFill(price, domain, props.colourByPrice),
         fillOpacity: 0.95,
       })
         .bindTooltip(`${shape.pin.place} · national average`, { direction: "top" })
         .addTo(dots);
     }
     dotsRef.current = dots;
-    syncDots(map, dots);
+    if (props.scope === "world") syncDots(map, dots);
+    else dots.addTo(map);
 
     return () => {
       layer.remove();
       dots.remove();
       dotsRef.current = null;
     };
-  }, [props.countries, props.fuel, props.rates, props.shapes]);
+  }, [props.colourByPrice, props.countries, props.focusCode, props.fuel, props.rates, props.scope, props.shapes]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !props.origin) return;
-    const zoom = props.origin.via === "country" ? 5.5 : 12;
-    const target: L.LatLngExpression = [props.origin.lat, props.origin.lon];
-    if (props.reducedMotion) map.setView(target, zoom);
-    else map.flyTo(target, zoom, { duration: 0.85 });
-  }, [props.origin, props.reducedMotion]);
+    if (!map) return;
+    const motion = props.reducedMotion;
+    if (props.scope === "world") {
+      moveMap(map, [22, 8], 2, motion);
+      return;
+    }
+    if (!props.origin) return;
+    if (props.scope === "country") {
+      const shape = props.shapes.find((item) => item.code === props.focusCode);
+      if (shape) {
+        const bounds = L.geoJSON(shape.feature).getBounds();
+        if (bounds.isValid()) {
+          if (motion) map.fitBounds(bounds, { padding: [20, 20], animate: false });
+          else map.flyToBounds(bounds, { padding: [20, 20], duration: 0.85 });
+          return;
+        }
+      }
+    }
+    const km = props.scope === "country" ? 40 : Number(props.scope);
+    const bounds = circleBounds(props.origin.lat, props.origin.lon, km);
+    if (motion) map.fitBounds(bounds, { padding: [28, 28], animate: false });
+    else map.flyToBounds(bounds, { padding: [28, 28], duration: 0.85 });
+  }, [props.focusCode, props.origin, props.reducedMotion, props.scope, props.shapes]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -183,12 +211,16 @@ export function MapView(props: Props) {
         zIndexOffset: 800,
       }).addTo(group);
     }
+    const prices = props.ranked.map((row) => row.unitPrice);
+    const mid = median(prices);
     for (const station of props.ranked) {
-      const tone = station.badges.includes("efficient")
-        ? "win"
-        : station.unitPrice > median(props.ranked.map((row) => row.unitPrice)) * 1.05
-          ? "ouch"
-          : "ok";
+      const tone = !props.colourByPrice
+        ? "ok"
+        : station.badges.includes("efficient")
+          ? "win"
+          : station.unitPrice > mid * 1.05
+            ? "ouch"
+            : "ok";
       const selected = station.id === props.selectedId;
       const marker = L.marker([station.lat, station.lon], {
         icon: L.divIcon({
@@ -223,30 +255,61 @@ export function MapView(props: Props) {
     return () => {
       group.remove();
     };
-  }, [props.compareCurrency, props.hunting, props.origin, props.ranked, props.selectedId]);
+  }, [props.colourByPrice, props.compareCurrency, props.hunting, props.origin, props.ranked, props.selectedId]);
 
   const domain = scaleDomain(
     props.rates ? [...eurPrices(props.countries, props.rates, props.fuel).values()] : [],
   );
+  const localDomain = scaleDomain(props.ranked.map((row) => row.unitPrice));
+  const wide = props.scope === "world" || props.scope === "country";
 
   return (
     <div className={`map-stage${props.pinMode ? " dropping" : ""}`}>
-      <div ref={host} className="map-canvas" role="application" aria-label="World fuel map" />
+      <div ref={host} className="map-canvas" role="application" aria-label="Fuel map" />
       <div className="legend" aria-hidden="true">
-        <span>Cheaper</span>
-        <i className="legend-bar" />
-        <span>Pricier</span>
-        {domain ? (
-          <small>
-            {formatUnit(domain.lo, "EUR")}–{formatUnit(domain.hi, "EUR")}/L · middle 80%
-          </small>
+        {props.colourByPrice ? (
+          <>
+            <span>Cheaper</span>
+            <i className="legend-bar" />
+            <span>Pricier</span>
+            {wide && domain ? (
+              <small>
+                {formatUnit(domain.lo, "EUR")}–{formatUnit(domain.hi, "EUR")}/L · national averages
+              </small>
+            ) : localDomain ? (
+              <small>
+                {formatUnit(localDomain.lo, props.compareCurrency)}–{formatUnit(localDomain.hi, props.compareCurrency)}
+                /L · these pumps
+              </small>
+            ) : (
+              <small>Waiting for prices in this scope</small>
+            )}
+          </>
         ) : (
-          <small>Waiting for country prices</small>
+          <span>One colour. The stickers still talk.</span>
         )}
       </div>
       {props.pinMode ? <p className="pin-banner">Tap the map. I'll plant a brave little pin.</p> : null}
     </div>
   );
+}
+
+const NEUTRAL_FILL = "#e7d3b0";
+
+function countryFill(price: number | undefined, domain: { lo: number; hi: number } | null, colourByPrice: boolean): string {
+  if (!colourByPrice || price == null || !domain) return NEUTRAL_FILL;
+  return priceColor((price - domain.lo) / (domain.hi - domain.lo));
+}
+
+function moveMap(map: L.Map, center: L.LatLngExpression, zoom: number, reducedMotion: boolean): void {
+  if (reducedMotion) map.setView(center, zoom);
+  else map.flyTo(center, zoom, { duration: 0.85 });
+}
+
+function circleBounds(lat: number, lon: number, km: number): L.LatLngBounds {
+  const dLat = km / 111;
+  const dLon = km / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  return L.latLngBounds([lat - dLat, lon - dLon], [lat + dLat, lon + dLon]);
 }
 
 function syncDots(map: L.Map, dots: L.LayerGroup | null): void {
