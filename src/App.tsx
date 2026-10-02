@@ -250,18 +250,30 @@ export function App() {
         />
       </main>
       <footer className="credits">
-        <p>
-          Country prices and exchange rates:{" "}
-          <a href="https://openvan.camp">OpenVan.camp</a> (CC BY 4.0). Stations: France — prix-carburants.gouv.fr,
-          Licence Ouverte; Spain — Ministerio para la Transición Ecológica y el Reto Demográfico; Italy — MIMIT, CC BY
-          4.0; Western Australia — FuelWatch, Government of Western Australia, CC BY 4.0; via{" "}
-          <a href="https://fuelwide.com">FuelWide</a>. United Kingdom — UK Government Fuel Finder, Open Government
-          Licence v3.0, via <a href="https://fuelcosts.co.uk">FuelCosts.co.uk</a> (the official API needs OAuth, so this
-          open copy is what we can cache). UK pins that disagree with their postcode are nudged using{" "}
-          <a href="https://postcodes.io">postcodes.io</a> (ONS data, OGL). Map ©{" "}
-          <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ©{" "}
-          <a href="https://carto.com/attributions">CARTO</a>. Country shapes and capitals: Natural Earth.
-        </p>
+        <details className="sources">
+          <summary>Sources & disclaimer</summary>
+          <div className="sources-body">
+            <p>
+              Country prices and exchange rates: <a href="https://openvan.camp">OpenVan.camp</a> (CC BY 4.0).
+            </p>
+            <p>
+              Station prices: France — prix-carburants.gouv.fr, Licence Ouverte; Spain — Ministerio para la Transición
+              Ecológica y el Reto Demográfico; Italy — MIMIT, CC BY 4.0; Western Australia — FuelWatch, Government of
+              Western Australia, CC BY 4.0; via <a href="https://fuelwide.com">FuelWide</a>.
+            </p>
+            <p>
+              United Kingdom — UK Government Fuel Finder, Open Government Licence v3.0, via{" "}
+              <a href="https://fuelcosts.co.uk">FuelCosts.co.uk</a>. The official Fuel Finder API needs OAuth, so this
+              open copy is what we can cache. UK pins that disagree with their postcode are nudged using{" "}
+              <a href="https://postcodes.io">postcodes.io</a> (ONS data, OGL).
+            </p>
+            <p>
+              Map © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ©{" "}
+              <a href="https://carto.com/attributions">CARTO</a>. Country shapes and capitals: Natural Earth. National
+              averages are not pumps.
+            </p>
+          </div>
+        </details>
         <p className="version-stamp">{APP_VERSION}</p>
       </footer>
       <div className="toasts" aria-live="polite">
