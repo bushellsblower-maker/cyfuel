@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import worker from "./index";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import worker, { AI_TIMEOUT_MS, CAR_MODEL } from "./index";
 
 const ctx = {
   waitUntil(promise: Promise<unknown>) {
@@ -60,4 +60,41 @@ describe("POST /api/car-tank", () => {
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/slider/i);
   });
+
+  it("stops waiting when Workers AI never answers", async () => {
+    vi.useFakeTimers();
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line?: unknown) => {
+      logs.push(String(line));
+    });
+    const pending = worker.fetch(
+      post("Golf"),
+      {
+        APP_VERSION: "test",
+        AI: { run: () => new Promise(() => undefined) },
+      } as unknown as Env,
+      ctx,
+    );
+    await vi.advanceTimersByTimeAsync(AI_TIMEOUT_MS);
+    const response = await pending;
+    expect(response.status).toBe(504);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/brochure/i);
+    const event = logs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as { event?: string; model?: string; durationMs?: number };
+        } catch {
+          return null;
+        }
+      })
+      .find((entry) => entry?.event === "car_ai_timeout");
+    expect(event?.model).toBe(CAR_MODEL);
+    expect(event?.durationMs).toBeGreaterThanOrEqual(AI_TIMEOUT_MS);
+    spy.mockRestore();
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });

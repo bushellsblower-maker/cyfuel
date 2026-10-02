@@ -35,7 +35,7 @@ npm run build
 - Pump prices in the local currency. Totals can be compared in the currency under your pin, or in another currency via OpenVan's euro rates.
 - Prices that were published per gallon are converted to per litre for the maths, and the original unit is still mentioned.
 - A Metric / Imperial toggle for the tank and thirst. Imperial is **UK**: imperial gallons and UK mpg (not US mpg). The efficient-fill maths stays in litres and L/100km.
-- “What do you drive?” asks Workers AI (`@cf/meta/llama-3.1-8b-instruct-fp8` on the `AI` binding) for a usable tank and, when it knows, a combined L/100km. The Worker checks the JSON before the page trusts it.
+- “What do you drive?” asks Workers AI (`@cf/meta/llama-3.2-3b-instruct` on the `AI` binding) for a usable tank and, when it knows, a combined L/100km. The 3B instruct model is on the same free catalog as the 8B fp8 model and usually answers faster; the 8B call sometimes never came back. The Worker checks the JSON, gives up after 12 seconds, and the page gives up after 15.
 
 ## Data sources
 
@@ -52,7 +52,7 @@ All upstream calls go through the Worker (`/api/prices`, `/api/rates`, `/api/sta
 | Country shapes | [world-atlas](https://github.com/topojson/world-atlas) (Natural Earth 110m) | Natural Earth is public domain |
 | Capitals | Natural Earth populated places | Public domain |
 | Tiles | [OpenStreetMap standard tiles](https://tile.openstreetmap.org) | © OpenStreetMap contributors — [copyright](https://www.openstreetmap.org/copyright). No API key. These are the community servers, so keep traffic modest. |
-| Car tank guess | Workers AI `@cf/meta/llama-3.1-8b-instruct-fp8` | Account neurons via the `AI` binding. Not a measured tank — Pip is guessing from the name. |
+| Car tank guess | Workers AI `@cf/meta/llama-3.2-3b-instruct` | Account neurons via the `AI` binding. Smaller than 8B fp8 so a lookup is less likely to hang. Not a measured tank — Pip is guessing from the name. |
 
 Australia outside Western Australia, and most other countries, only have a national average. The map says so.
 

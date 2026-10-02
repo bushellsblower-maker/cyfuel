@@ -6,7 +6,9 @@ import { fuelWideSlug, stationFromFuelWide, stationFromUk } from "../shared/stat
 import type { Station, StationsPayload } from "../shared/types";
 import { APP_VERSION } from "../shared/version";
 
-const CAR_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
+/** 3B instruct is on the same free Workers AI catalog and answers quicker than 8B fp8, which sometimes never resolved. */
+export const CAR_MODEL = "@cf/meta/llama-3.2-3b-instruct";
+export const AI_TIMEOUT_MS = 12_000;
 
 const USER_AGENT = "cyfuel/1.0 (+https://cyfuel.cybush.uk)";
 const OPEN_VAN = "https://openvan.camp";
@@ -109,32 +111,45 @@ async function lookupCarTank(request: Request, env: Env, ctx: ExecutionContext):
     console.log(JSON.stringify({ event: "car_limit_failed", message: String(error) }));
   }
 
+  const started = Date.now();
+  let abandoned = false;
+  const pending = env.AI.run(CAR_MODEL, {
+    messages: [
+      {
+        role: "system",
+        content: "You reply with one JSON object and nothing else.",
+      },
+      {
+        role: "user",
+        content: [
+          "Estimate the usable fuel tank and typical combined consumption for this car.",
+          'JSON only: {"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
+          "tankLitres is litres, not gallons. efficiencyLPer100km is combined L/100km, or null if unsure.",
+          "notes is one short sentence.",
+          `Car: ${car}`,
+        ].join("\n"),
+      },
+    ],
+    max_tokens: 180,
+    temperature: 0,
+  }).then(
+    (value) => value,
+    (error: unknown) => {
+      if (abandoned) return null;
+      throw error;
+    },
+  );
+
   try {
-    const output = await env.AI.run(CAR_MODEL, {
-      messages: [
-        {
-          role: "system",
-          content: "You reply with one JSON object and nothing else.",
-        },
-        {
-          role: "user",
-          content: [
-            "Estimate the usable fuel tank and typical combined consumption for this car.",
-            'JSON only: {"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
-            "tankLitres is litres, not gallons. efficiencyLPer100km is combined L/100km, or null if unsure.",
-            "notes is one short sentence.",
-            `Car: ${car}`,
-          ].join("\n"),
-        },
-      ],
-      max_tokens: 180,
-      temperature: 0,
-    });
-    const text = typeof output.response === "string" ? output.response : "";
+    const output = await withDeadline(pending, AI_TIMEOUT_MS);
+    const durationMs = Date.now() - started;
+    const text = output && typeof output.response === "string" ? output.response : "";
     const estimate = parseCarTank(text);
     if (!estimate) {
+      console.log(JSON.stringify({ event: "car_ai_bad_json", model: CAR_MODEL, durationMs }));
       return json({ error: "Pip stared at the brochure and learned nothing. Type the tank yourself." }, 502, 0);
     }
+    console.log(JSON.stringify({ event: "car_ai_ok", model: CAR_MODEL, durationMs }));
     const response = json(estimate, 200, 0);
     response.headers.set("X-Cyfuel-Cache", "MISS");
     if (cache) ctx.waitUntil(
@@ -151,9 +166,37 @@ async function lookupCarTank(request: Request, env: Env, ctx: ExecutionContext):
     );
     return response;
   } catch (error) {
-    console.log(JSON.stringify({ event: "car_ai_failed", message: error instanceof Error ? error.message : String(error) }));
+    const durationMs = Date.now() - started;
+    if (error instanceof AiTookTooLong) {
+      abandoned = true;
+      console.log(JSON.stringify({ event: "car_ai_timeout", model: CAR_MODEL, durationMs }));
+      return json({ error: "Pip wandered off with the brochure. Try again, or set the tank yourself." }, 504, 0);
+    }
+    console.log(
+      JSON.stringify({
+        event: "car_ai_failed",
+        model: CAR_MODEL,
+        durationMs,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
     return json({ error: "Pip dropped the brochure. The tank slider still works." }, 502, 0);
   }
+}
+
+class AiTookTooLong extends Error {
+  constructor() {
+    super("ai_timeout");
+    this.name = "AiTookTooLong";
+  }
+}
+
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new AiTookTooLong()), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer ?? null));
 }
 
 async function loadPrices(): Promise<unknown> {
