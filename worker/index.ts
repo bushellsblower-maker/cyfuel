@@ -1,9 +1,12 @@
+import { cleanCarQuery, parseCarTank } from "../shared/carTank";
 import { regionsNear, type RegionId } from "../shared/coverage";
 import { haversineKm } from "../shared/geo";
 import { normalizePrices, normalizeRates } from "../shared/normalize";
 import { fuelWideSlug, stationFromFuelWide, stationFromUk } from "../shared/stations";
 import type { Station, StationsPayload } from "../shared/types";
 import { APP_VERSION } from "../shared/version";
+
+const CAR_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
 
 const USER_AGENT = "cyfuel/1.0 (+https://cyfuel.cybush.uk)";
 const OPEN_VAN = "https://openvan.camp";
@@ -24,6 +27,9 @@ export default {
     }
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+    if (request.method === "POST" && url.pathname === "/api/car-tank") {
+      return lookupCarTank(request, env, ctx);
     }
     if (request.method !== "GET") {
       return json({ error: "The nozzle only pours GET requests." }, 405, 0);
@@ -61,6 +67,94 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+async function lookupCarTank(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const length = Number(request.headers.get("content-length") ?? "0");
+  if (length > 2000) {
+    return json({ error: "That description is longer than the car. Shorten it." }, 400, 0);
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Pip wanted a car name and got a puddle." }, 400, 0);
+  }
+  const record = asRecord(body);
+  const car = cleanCarQuery(typeof record?.car === "string" ? record.car : "");
+  if (car.length < 2) {
+    return json({ error: "Tell Pip what you drive. A blank box has a very small tank." }, 400, 0);
+  }
+
+  const cache = defaultCache();
+  const answerKey = new Request(`https://cyfuel.cybush.uk/api/car-tank-cache?car=${encodeURIComponent(car.toLowerCase())}`);
+  try {
+    const hit = cache ? await cache.match(answerKey) : undefined;
+    if (hit) {
+      const headers = new Headers(hit.headers);
+      headers.set("X-Cyfuel-Cache", "HIT");
+      return new Response(hit.body, { status: hit.status, headers });
+    }
+  } catch (error) {
+    console.log(JSON.stringify({ event: "car_cache_match_failed", message: String(error) }));
+  }
+
+  const ip = request.headers.get("CF-Connecting-IP") || "local";
+  const limitKey = new Request(`https://cyfuel.cybush.uk/api/car-tank-limit/${encodeURIComponent(ip)}`);
+  try {
+    if (cache && (await cache.match(limitKey))) {
+      return json({ error: "Pip is still chewing the last brochure. Give it a few seconds." }, 429, 0);
+    }
+    await cache?.put(limitKey, new Response("1", { headers: { "Cache-Control": "public, max-age=20" } }));
+  } catch (error) {
+    console.log(JSON.stringify({ event: "car_limit_failed", message: String(error) }));
+  }
+
+  try {
+    const output = await env.AI.run(CAR_MODEL, {
+      messages: [
+        {
+          role: "system",
+          content: "You reply with one JSON object and nothing else.",
+        },
+        {
+          role: "user",
+          content: [
+            "Estimate the usable fuel tank and typical combined consumption for this car.",
+            'JSON only: {"tankLitres": number, "efficiencyLPer100km": number|null, "confidence": "high"|"medium"|"low", "notes": string}',
+            "tankLitres is litres, not gallons. efficiencyLPer100km is combined L/100km, or null if unsure.",
+            "notes is one short sentence.",
+            `Car: ${car}`,
+          ].join("\n"),
+        },
+      ],
+      max_tokens: 180,
+      temperature: 0,
+    });
+    const text = typeof output.response === "string" ? output.response : "";
+    const estimate = parseCarTank(text);
+    if (!estimate) {
+      return json({ error: "Pip stared at the brochure and learned nothing. Type the tank yourself." }, 502, 0);
+    }
+    const response = json(estimate, 200, 0);
+    response.headers.set("X-Cyfuel-Cache", "MISS");
+    if (cache) ctx.waitUntil(
+      cache
+        .put(
+          answerKey,
+          new Response(JSON.stringify(estimate), {
+            headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=86400" },
+          }),
+        )
+        .catch((error: unknown) => {
+          console.log(JSON.stringify({ event: "car_cache_put_failed", message: String(error) }));
+        }),
+    );
+    return response;
+  } catch (error) {
+    console.log(JSON.stringify({ event: "car_ai_failed", message: error instanceof Error ? error.message : String(error) }));
+    return json({ error: "Pip dropped the brochure. The tank slider still works." }, 502, 0);
+  }
+}
 
 async function loadPrices(): Promise<unknown> {
   const payload = await fetchJson(`${OPEN_VAN}/api/fuel/prices?source=cyfuel.cybush.uk`);
@@ -260,9 +354,17 @@ function json(data: unknown, status: number, ttlSeconds: number): Response {
 function corsHeaders(): Headers {
   return new Headers({
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   });
+}
+
+function defaultCache(): Cache | null {
+  try {
+    return typeof caches === "undefined" ? null : caches.default;
+  } catch {
+    return null;
+  }
 }
 
 function numberParam(url: URL, name: string): number | null {

@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref, type ToggleEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref, type ToggleEvent } from "react";
 import { haversineKm } from "../shared/geo";
 import { FUELS } from "../shared/fuels";
 import { convert } from "../shared/money";
 import { rankStations, sortRanked } from "../shared/rank";
 import type { PricesPayload, RankMode, RatesPayload, StationsPayload } from "../shared/types";
+import { formatTank, formatThirst } from "../shared/units";
 import { APP_VERSION } from "../shared/version";
 import { CityDialog, SettingsDialog } from "./components/Dialogs";
 import { MapView, type MapOrigin } from "./components/MapView";
 import { Mascot } from "./components/Mascot";
 import { Sheet } from "./components/Sheet";
-import { getPrices, getRates, getStations } from "./lib/api";
+import { getPrices, getRates, getStations, lookupCar } from "./lib/api";
 import { countryAt, countryShapes } from "./lib/country";
 import { formatUnit } from "./lib/format";
-import { mascotLine } from "./lib/quips";
+import { mascotLine, pipTankLine } from "./lib/quips";
 import { fetchRadiusKm, SCOPES, usePreferences } from "./lib/settings";
 
 type Toast = { id: string; message: string };
@@ -39,6 +40,8 @@ export function App() {
   const [controlsOpen, setControlsOpen] = useState(true);
   const [mapOpen, setMapOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
+  const [carQuery, setCarQuery] = useState("");
+  const [carBusy, setCarBusy] = useState(false);
   const listRef = useRef<HTMLDetailsElement>(null);
   const desktop = useDesktop();
 
@@ -169,6 +172,29 @@ export function App() {
       ? { lat: here.pin.lat, lon: here.pin.lon, label: `${here.pin.place} · national average, not a pump` }
       : null;
 
+  function lookupDrive(event: FormEvent): void {
+    event.preventDefault();
+    const car = carQuery.trim();
+    if (carBusy) return;
+    if (car.length < 2) {
+      toast("Tell Pip what you drive. A blank box has a very small tank.");
+      return;
+    }
+    setCarBusy(true);
+    lookupCar(car)
+      .then((estimate) => {
+        setSettings({
+          tankLitres: estimate.tankLitres,
+          ...(estimate.efficiencyLPer100km != null ? { litresPer100km: estimate.efficiencyLPer100km } : {}),
+        });
+        toast(pipTankLine(estimate, settings.units));
+      })
+      .catch((error: unknown) => {
+        toast(error instanceof Error ? error.message : "Pip dropped the brochure. The tank slider still works.");
+      })
+      .finally(() => setCarBusy(false));
+  }
+
   function revealList(): void {
     setListOpen(true);
     if (listRef.current) listRef.current.open = true;
@@ -230,6 +256,50 @@ export function App() {
               </button>
             ))}
           </div>
+          <div className="scopebar" role="radiogroup" aria-label="Tank and thirst units">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={settings.units === "metric"}
+              className={settings.units === "metric" ? "is-on" : ""}
+              onClick={() => setSettings({ units: "metric" })}
+            >
+              Metric
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={settings.units === "imperial"}
+              className={settings.units === "imperial" ? "is-on" : ""}
+              onClick={() => setSettings({ units: "imperial" })}
+            >
+              Imperial
+            </button>
+          </div>
+          <p className="unit-note">
+            {settings.units === "imperial" ? "Tank (gal)" : "Tank (L)"} {formatTank(settings.tankLitres, settings.units)}
+            {" · "}
+            {settings.units === "imperial" ? "Thirst (mpg)" : "Thirst (L/100km)"}{" "}
+            {formatThirst(settings.litresPer100km, settings.units)}
+            {settings.units === "imperial" ? " · UK gallons and UK mpg, not US." : ""}
+          </p>
+          <form className="car-form" onSubmit={lookupDrive}>
+            <label className="car-label">
+              <span>What do you drive?</span>
+              <input
+                type="text"
+                name="car"
+                maxLength={80}
+                value={carQuery}
+                placeholder="2019 Golf 1.5 TSI"
+                autoComplete="off"
+                onChange={(event) => setCarQuery(event.target.value)}
+              />
+            </label>
+            <button type="submit" className="btn" disabled={carBusy}>
+              {carBusy ? "Asking Pip…" : "Lookup"}
+            </button>
+          </form>
           <button
             type="button"
             className={`btn${settings.colourByPrice ? " is-on" : ""}`}

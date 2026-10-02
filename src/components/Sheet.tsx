@@ -3,6 +3,7 @@ import { FUELS } from "../../shared/fuels";
 import { unitCaption } from "../../shared/fuels";
 import { winner, type RankedStation } from "../../shared/rank";
 import type { CountryPrice, FuelId, RankMode, StationsPayload } from "../../shared/types";
+import { formatTank, formatThirst } from "../../shared/units";
 import { priceColor, scaleDomain } from "../lib/color";
 import { formatKm, formatLitres, formatMoney, formatUnit } from "../lib/format";
 import { cardQuip } from "../lib/quips";
@@ -71,7 +72,10 @@ export function Sheet(props: Props) {
         ))}
       </div>
       <p className="assumptions">
-        {props.settings.tankLitres.toFixed(0)} L tank · {props.settings.litresPer100km.toFixed(1)} L/100km ·{" "}
+        {formatTank(props.settings.tankLitres, props.settings.units)} tank ·{" "}
+        {props.settings.units === "imperial" ? "Thirst (mpg) " : "Thirst (L/100km) "}
+        {formatThirst(props.settings.litresPer100km, props.settings.units)}
+        {props.settings.units === "imperial" ? " UK" : ""} ·{" "}
         {props.settings.roundTrip ? "there and back" : "one way"} · {scopeLine} · totals in {props.compareCurrency}
       </p>
       {homeGrade && props.home ? (

@@ -1,5 +1,8 @@
 import { formatKm, formatMoney } from "./format";
 import { winner, type RankedStation } from "../../shared/rank";
+import type { CarTankEstimate } from "../../shared/carTank";
+import { formatTank, formatThirst } from "../../shared/units";
+import type { UnitSystem } from "../../shared/units";
 
 export type Mood = "wave" | "pump" | "bargain" | "clever" | "ouch" | "hunt";
 
@@ -63,6 +66,16 @@ export function mascotLine(input: {
     return { mood: "ouch", line: "These pumps look very pleased with themselves. The clever one is merely the least cheeky." };
   }
   return { mood: "bargain", line: "This is the efficient fill: tank plus the fuel you spend arriving." };
+}
+
+export function pipTankLine(estimate: CarTankEstimate, units: UnitSystem): string {
+  const tank = formatTank(estimate.tankLitres, units);
+  const thirst =
+    estimate.efficiencyLPer100km == null
+      ? "I left the thirst slider alone"
+      : `thirst ${formatThirst(estimate.efficiencyLPer100km, units)}${units === "imperial" ? " (UK)" : ""}`;
+  const note = estimate.notes ? ` ${estimate.notes}` : "";
+  return `Pip scribbled ${tank} and ${thirst}. ${estimate.confidence} confidence.${note}`;
 }
 
 export function cardQuip(row: RankedStation, ranked: RankedStation[]): string {

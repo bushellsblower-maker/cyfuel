@@ -15,6 +15,10 @@
   "vars": {
     "APP_VERSION": "v1 · 2 Oct 2026"
   },
+  // Workers AI. Neurons come from the Cloudflare account. No third-party LLM key.
+  "ai": {
+    "binding": "AI"
+  },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
