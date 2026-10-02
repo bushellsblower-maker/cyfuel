@@ -42,7 +42,9 @@ export function App() {
   const [listOpen, setListOpen] = useState(true);
   const [carQuery, setCarQuery] = useState("");
   const [carBusy, setCarBusy] = useState(false);
+  const [tankFresh, setTankFresh] = useState(false);
   const listRef = useRef<HTMLDetailsElement>(null);
+  const flashTimer = useRef<number | null>(null);
   const desktop = useDesktop();
 
   useEffect(() => {
@@ -187,6 +189,10 @@ export function App() {
           tankLitres: estimate.tankLitres,
           ...(estimate.efficiencyLPer100km != null ? { litresPer100km: estimate.efficiencyLPer100km } : {}),
         });
+        setControlsOpen(true);
+        setTankFresh(true);
+        if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
+        flashTimer.current = window.setTimeout(() => setTankFresh(false), 1600);
         toast(pipTankLine(estimate, settings.units));
       })
       .catch((error: unknown) => {
@@ -276,7 +282,7 @@ export function App() {
               Imperial
             </button>
           </div>
-          <p className="unit-note">
+          <p className={`unit-note${tankFresh ? " is-fresh" : ""}`}>
             {settings.units === "imperial" ? "Tank (gal)" : "Tank (L)"} {formatTank(settings.tankLitres, settings.units)}
             {" · "}
             {settings.units === "imperial" ? "Thirst (mpg)" : "Thirst (L/100km)"}{" "}

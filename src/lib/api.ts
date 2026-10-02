@@ -32,8 +32,49 @@ export function getStations(
   return getJson(`/api/stations?${query.toString()}`, signal);
 }
 
-export function lookupCar(car: string, signal?: AbortSignal): Promise<CarTankEstimate> {
-  return postJson("/api/car-tank", { car }, signal);
+export const LOOKUP_TIMEOUT_MS = 15_000;
+export const LOOKUP_TOO_SLOW = "Pip took too long — try again or set the tank yourself";
+
+export async function lookupCar(car: string, signal?: AbortSignal): Promise<CarTankEstimate> {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), LOOKUP_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
+  try {
+    return await raceAbort(postJson("/api/car-tank", { car }, combined), combined);
+  } catch (error) {
+    if (combined.aborted || isAbortError(error)) throw new Error(LOOKUP_TOO_SLOW);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function abortError(): DOMException {
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }
 
 async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {

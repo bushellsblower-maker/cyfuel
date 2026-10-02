@@ -117,7 +117,12 @@ a { color: var(--sea); }
 .controls-body { display: grid; gap: 8px; }
 .scopebar { display: flex; flex-wrap: wrap; gap: 6px; }
 .scopebar button { white-space: nowrap; }
-.unit-note { margin: 0; font-size: 0.86rem; font-weight: 800; line-height: 1.35; }
+.unit-note { margin: 0; font-size: 0.86rem; font-weight: 800; line-height: 1.35; border-radius: 10px; }
+.unit-note.is-fresh { animation: tank-pop 1.4s ease; }
+@keyframes tank-pop {
+  0% { background: var(--sun); box-shadow: inset 0 0 0 3px var(--ink); }
+  100% { background: transparent; box-shadow: inset 0 0 0 0 transparent; }
+}
 .car-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .car-label { display: grid; gap: 4px; flex: 1 1 12rem; min-width: 0; font-weight: 800; }
 .car-label input {
