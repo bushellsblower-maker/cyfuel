@@ -40,8 +40,29 @@ describe("parseCarTank", () => {
     expect(knownCarTank("VW Golf")).toMatchObject({ tankLitres: 50, confidence: "medium", notes: BROCHURE_NOTE });
     expect(knownCarTank("Ford Focus estate")).toMatchObject({ tankLitres: 52 });
     expect(knownCarTank("Honda Civic")).toMatchObject({ tankLitres: 46 });
+    expect(knownCarTank("2008 Saab")).toMatchObject({
+      tankLitres: 61,
+      efficiencyLPer100km: 8.5,
+      confidence: "medium",
+      notes: BROCHURE_NOTE,
+    });
+    expect(knownCarTank("Saab 9-3")).toMatchObject({ tankLitres: 61, efficiencyLPer100km: 8.5 });
+    expect(knownCarTank("9-5")).toMatchObject({ tankLitres: 61 });
+    expect(knownCarTank("Audi A3")).toMatchObject({ tankLitres: 50 });
+    expect(knownCarTank("BMW 3 series")).toMatchObject({ tankLitres: 59 });
+    expect(knownCarTank("Mercedes C-Class")).toMatchObject({ tankLitres: 66 });
     expect(knownCarTank("a minivan")).toBeNull();
     expect(knownCarTank("Zorblax")).toBeNull();
+    expect(knownCarTank("2008")).toBeNull();
+  });
+
+  it("reads a litre figure out of prose", () => {
+    expect(parseCarTank("The tank is about 61 litres and it uses 8.5 L/100km.")).toMatchObject({
+      tankLitres: 61,
+      efficiencyLPer100km: 8.5,
+      confidence: "low",
+    });
+    expect(parseCarTank("Combined economy is 8.5 L/100km with no tank size.")).toBeNull();
   });
 
   it("keeps a short car name and drops the rest", () => {
