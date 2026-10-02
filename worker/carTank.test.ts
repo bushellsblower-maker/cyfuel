@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BROCHURE_NOTE } from "../shared/carTank";
 import worker, { AI_TIMEOUT_MS, CAR_MODEL } from "./index";
 
 const ctx = {
@@ -9,16 +10,21 @@ const ctx = {
   props: {},
 } as unknown as ExecutionContext;
 
-function env(response: string | Error) {
+function env(response: string | Error | Array<string | Error>) {
+  const replies = Array.isArray(response) ? response : [response];
+  let calls = 0;
   return {
     APP_VERSION: "test",
+    calls: () => calls,
     AI: {
       run: async () => {
-        if (response instanceof Error) throw response;
-        return { response };
+        const next = replies[Math.min(calls, replies.length - 1)];
+        calls += 1;
+        if (next instanceof Error) throw next;
+        return { response: next };
       },
     },
-  } as unknown as Env;
+  } as unknown as Env & { calls: () => number };
 }
 
 function post(car: string) {
@@ -48,10 +54,50 @@ describe("POST /api/car-tank", () => {
   it("refuses a blank car and a model that will not speak JSON", async () => {
     const blank = await worker.fetch(post("  "), env("{}"), ctx);
     expect(blank.status).toBe(400);
-    const muddle = await worker.fetch(post("Golf"), env("I like cars."), ctx);
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line?: unknown) => {
+      logs.push(String(line));
+    });
+    const binding = env("I like cars. The tank is big.");
+    const muddle = await worker.fetch(post("Zorblax"), binding, ctx);
     expect(muddle.status).toBe(502);
     const body = (await muddle.json()) as { error: string };
     expect(body.error).toMatch(/brochure/i);
+    expect(binding.calls()).toBe(2);
+    const bad = logs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as { event?: string; sample?: string };
+        } catch {
+          return null;
+        }
+      })
+      .find((entry) => entry?.event === "car_ai_bad_json");
+    expect(bad?.sample).toMatch(/I like cars/);
+    spy.mockRestore();
+  });
+
+  it("retries once and keeps the stricter JSON", async () => {
+    const binding = env([
+      "Sure, here you go: not json",
+      '{"tankLitres":47,"efficiencyLPer100km":5.4,"confidence":"high","notes":"Second try."}',
+    ]);
+    const response = await worker.fetch(post("Zorblax"), binding, ctx);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ tankLitres: 47, notes: "Second try." });
+    expect(binding.calls()).toBe(2);
+  });
+
+  it("uses a known brochure when both replies waffle", async () => {
+    const binding = env("The Ford Focus has a decent tank, about fifty litres.");
+    const response = await worker.fetch(post("Ford Focus"), binding, ctx);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tankLitres: 52,
+      confidence: "medium",
+      notes: BROCHURE_NOTE,
+    });
+    expect(binding.calls()).toBe(2);
   });
 
   it("keeps the slider path when Workers AI throws", async () => {

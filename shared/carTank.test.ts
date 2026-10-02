@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCarQuery, parseCarTank } from "./carTank";
+import { BROCHURE_NOTE, cleanCarQuery, knownCarTank, parseCarTank } from "./carTank";
 
 describe("parseCarTank", () => {
   it("reads a JSON object and clamps a boastful tank", () => {
@@ -27,6 +27,21 @@ describe("parseCarTank", () => {
 
   it("rejects prose with no object", () => {
     expect(parseCarTank("I like cars.")).toBeNull();
+  });
+
+  it("reads fenced JSON, string numbers, and ignores a later brace", () => {
+    const estimate = parseCarTank(
+      '```json\n{"tankLitres":"50","efficiencyLPer100km":"6.2","confidence":"high","notes":"Golf."}\n```\nThanks {friend}',
+    );
+    expect(estimate).toMatchObject({ tankLitres: 50, efficiencyLPer100km: 6.2, confidence: "high", notes: "Golf." });
+  });
+
+  it("guesses a known name when the model will not", () => {
+    expect(knownCarTank("VW Golf")).toMatchObject({ tankLitres: 50, confidence: "medium", notes: BROCHURE_NOTE });
+    expect(knownCarTank("Ford Focus estate")).toMatchObject({ tankLitres: 52 });
+    expect(knownCarTank("Honda Civic")).toMatchObject({ tankLitres: 46 });
+    expect(knownCarTank("a minivan")).toBeNull();
+    expect(knownCarTank("Zorblax")).toBeNull();
   });
 
   it("keeps a short car name and drops the rest", () => {

@@ -9,14 +9,20 @@ import { CityDialog, SettingsDialog } from "./components/Dialogs";
 import { MapView, type MapOrigin } from "./components/MapView";
 import { Mascot } from "./components/Mascot";
 import { Sheet } from "./components/Sheet";
-import { getPrices, getRates, getStations, lookupCar } from "./lib/api";
+import { getPrices, getRates, getStations, LookupFailed, lookupCar } from "./lib/api";
 import { countryAt, countryShapes } from "./lib/country";
 import { COMPARE_CURRENCIES, displayCurrency } from "./lib/currencies";
 import { currencyLabel, formatUnit } from "./lib/format";
-import { mascotLine, pipTankLine } from "./lib/quips";
+import { mascotLine, pipTankLine, tankSetLine } from "./lib/quips";
 import { fetchRadiusKm, insideScope, SCOPES, usePreferences } from "./lib/settings";
 
 type Toast = { id: string; message: string };
+
+type LookupStatus =
+  | { kind: "idle" }
+  | { kind: "busy"; stage: "ask" | "read" }
+  | { kind: "ok"; line: string }
+  | { kind: "err"; message: string; code?: string };
 
 export function App() {
   const reducedMotion = useReducedMotion();
@@ -42,9 +48,11 @@ export function App() {
   const [listOpen, setListOpen] = useState(true);
   const [carQuery, setCarQuery] = useState("");
   const [carBusy, setCarBusy] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState<LookupStatus>({ kind: "idle" });
   const [tankFresh, setTankFresh] = useState(false);
   const listRef = useRef<HTMLDetailsElement>(null);
   const flashTimer = useRef<number | null>(null);
+  const lookupStageTimer = useRef<number | null>(null);
   const placeTicket = useRef(0);
   const desktop = useDesktop();
 
@@ -198,10 +206,18 @@ export function App() {
     const car = carQuery.trim();
     if (carBusy) return;
     if (car.length < 2) {
-      toast("Tell Pip what you drive. A blank box has a very small tank.");
+      const message = "Tell Pip what you drive. A blank box has a very small tank.";
+      setLookupStatus({ kind: "err", message });
+      toast(message);
       return;
     }
     setCarBusy(true);
+    setLookupStatus({ kind: "busy", stage: "ask" });
+    if (lookupStageTimer.current != null) window.clearTimeout(lookupStageTimer.current);
+    lookupStageTimer.current = window.setTimeout(() => {
+      setLookupStatus((current) => (current.kind === "busy" ? { kind: "busy", stage: "read" } : current));
+    }, 700);
+    const units = settings.units;
     lookupCar(car)
       .then((estimate) => {
         setSettings({
@@ -212,12 +228,19 @@ export function App() {
         setTankFresh(true);
         if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
         flashTimer.current = window.setTimeout(() => setTankFresh(false), 1600);
-        toast(pipTankLine(estimate, settings.units));
+        setLookupStatus({ kind: "ok", line: tankSetLine(estimate, units) });
+        toast(pipTankLine(estimate, units));
       })
       .catch((error: unknown) => {
-        toast(error instanceof Error ? error.message : "Pip dropped the brochure. The tank slider still works.");
+        const message = error instanceof Error ? error.message : "Pip dropped the brochure. The tank slider still works.";
+        const code = error instanceof LookupFailed ? error.code : "network";
+        setLookupStatus({ kind: "err", message, code });
+        toast(message);
       })
-      .finally(() => setCarBusy(false));
+      .finally(() => {
+        if (lookupStageTimer.current != null) window.clearTimeout(lookupStageTimer.current);
+        setCarBusy(false);
+      });
   }
 
   function revealList(): void {
@@ -342,6 +365,22 @@ export function App() {
               {carBusy ? "Asking Pip…" : "Lookup"}
             </button>
           </form>
+          <p className={`car-status is-${lookupStatus.kind}`} role="status" aria-live="polite">
+            {lookupStatus.kind === "busy" ? <span className="car-bar" aria-hidden="true" /> : null}
+            {lookupStatus.kind === "idle" ? "A name is enough. Pip will guess the tank." : null}
+            {lookupStatus.kind === "busy"
+              ? lookupStatus.stage === "ask"
+                ? "Asking Pip…"
+                : "Reading the brochure…"
+              : null}
+            {lookupStatus.kind === "ok" ? lookupStatus.line : null}
+            {lookupStatus.kind === "err" ? (
+              <>
+                {lookupStatus.message}{" "}
+                {lookupStatus.code ? <span className="car-code">{lookupStatus.code}</span> : null}
+              </>
+            ) : null}
+          </p>
           <button
             type="button"
             className={`btn${settings.colourByPrice ? " is-on" : ""}`}

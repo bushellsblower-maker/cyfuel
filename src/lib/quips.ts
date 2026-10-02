@@ -88,6 +88,15 @@ export function emptyScopeLine(scope: Scope, place: string, uncovered: boolean):
     : `Pip sniffed ${scope} km around ${where} and the nozzles hid. Widen the scope, or this patch only has a national average.`;
 }
 
+export function tankSetLine(estimate: CarTankEstimate, units: UnitSystem): string {
+  const tank = formatTank(estimate.tankLitres, units);
+  const thirst =
+    estimate.efficiencyLPer100km == null
+      ? "thirst unchanged"
+      : `thirst ${formatThirst(estimate.efficiencyLPer100km, units)}`;
+  return `Set tank to ${tank} · ${thirst}`;
+}
+
 export function pipTankLine(estimate: CarTankEstimate, units: UnitSystem): string {
   const tank = formatTank(estimate.tankLitres, units);
   const thirst =
