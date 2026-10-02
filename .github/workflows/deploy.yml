@@ -1,0 +1,41 @@
+# Cloud-to-cloud publish. GitHub Actions builds the SPA and deploys Worker `cyfuel`.
+# Do not publish from a laptop.
+
+name: Deploy cyfuel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cyfuel
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CI: true
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: f027194dcc0be7e3812e673468bab58d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Require Cloudflare API token
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Add the GitHub Actions secret CLOUDFLARE_API_TOKEN on bushellsblower-maker/cyfuel (Settings → Secrets and variables → Actions). The account id is already in this workflow and in wrangler.jsonc. Then re-run the workflow. Deploy is GitHub Actions → Cloudflare only."
+            exit 1
+          fi
+      - name: Deploy Worker cyfuel
+        run: npx wrangler deploy
