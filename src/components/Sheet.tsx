@@ -14,8 +14,6 @@ const MODES: Array<{ id: RankMode; label: string }> = [
 ];
 
 type Props = {
-  open: boolean;
-  onToggle: () => void;
   sort: RankMode;
   onSort: (mode: RankMode) => void;
   fuel: FuelId;
@@ -47,13 +45,7 @@ export function Sheet(props: Props) {
   const homeGrade = props.home?.grades[props.fuel];
 
   return (
-    <section className={`sheet${props.open ? "" : " is-peek"}`} aria-label="Station ranking" aria-busy={props.loading}>
-      <div className="sheet-bar">
-        <h2>The clever list</h2>
-        <button type="button" className="btn btn-small" onClick={props.onToggle} aria-expanded={props.open}>
-          {props.open ? "Hide" : "Show"}
-        </button>
-      </div>
+    <section className="sheet" aria-label="Station ranking" aria-busy={props.loading}>
       <div className="modes" role="tablist" aria-label="How to sort pumps">
         {MODES.map((mode) => (
           <button

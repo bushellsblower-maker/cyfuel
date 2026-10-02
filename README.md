@@ -27,7 +27,7 @@ npm run build
 
 ## What you get
 
-- Leaflet map with CARTO/OpenStreetMap tiles, cartoon pump markers, and a world choropleth of national averages (coloured in EUR per litre, scale trimmed to the middle 80% so one wild price does not paint the planet one colour).
+- Leaflet map with OpenStreetMap standard tiles (no API key), cartoon pump markers, and a world choropleth of national averages (coloured in EUR per litre, scale trimmed to the middle 80% so one wild price does not paint the planet one colour).
 - Browser geolocation, with a city list or a dropped pin if permission is denied.
 - Real forecourts where an open feed exists. Everywhere else, a capital pin labelled as a **national average — not a pump**.
 - Petrol, premium, diesel, premium diesel, and LPG when a source publishes it.
@@ -46,7 +46,7 @@ All upstream calls go through the Worker (`/api/prices`, `/api/rates`, `/api/sta
 | United Kingdom stations | [FuelCosts.co.uk](https://fuelcosts.co.uk/docs), redistributing UK Government Fuel Finder | Open Government Licence v3.0. The [official Fuel Finder API](https://www.gov.uk/guidance/access-the-latest-fuel-prices-and-forecourt-data-via-api-or-email) needs OAuth, so this no-key redistribution is what the Worker can cache. A few FuelCosts pins disagree with their own postcode; those are moved to the [postcodes.io](https://postcodes.io) centroid (ONS data, OGL) when the drift is over 20 km. |
 | Country shapes | [world-atlas](https://github.com/topojson/world-atlas) (Natural Earth 110m) | Natural Earth is public domain |
 | Capitals | Natural Earth populated places | Public domain |
-| Tiles | CARTO Voyager, © OpenStreetMap contributors | [OSM copyright](https://www.openstreetmap.org/copyright), [CARTO attribution](https://carto.com/attributions) |
+| Tiles | [OpenStreetMap standard tiles](https://tile.openstreetmap.org) | © OpenStreetMap contributors — [copyright](https://www.openstreetmap.org/copyright). No API key. These are the community servers, so keep traffic modest. |
 
 Australia outside Western Australia, and most other countries, only have a national average. The map says so.
 

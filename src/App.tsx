@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref, type ToggleEvent } from "react";
 import { FUELS } from "../shared/fuels";
 import { convert } from "../shared/money";
 import { rankStations, sortRanked } from "../shared/rank";
@@ -35,7 +35,11 @@ export function App() {
   const [pinMode, setPinMode] = useState(false);
   const [sort, setSort] = useState<RankMode>("efficient");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(true);
+  const [mapOpen, setMapOpen] = useState(true);
+  const [listOpen, setListOpen] = useState(true);
+  const listRef = useRef<HTMLDetailsElement>(null);
+  const desktop = useDesktop();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -147,9 +151,20 @@ export function App() {
       ? { lat: here.pin.lat, lon: here.pin.lon, label: `${here.pin.place} · national average, not a pump` }
       : null;
 
+  function revealList(): void {
+    setListOpen(true);
+    if (listRef.current) listRef.current.open = true;
+  }
+
   return (
-    <div className={`shell${sheetOpen ? "" : " sheet-collapsed"}`}>
-      <a className="skip" href="#station-list">
+    <div className="shell">
+      <a
+        className="skip"
+        href="#station-list"
+        onClick={() => {
+          revealList();
+        }}
+      >
         Skip to the clever list
       </a>
       <header className="topbar">
@@ -163,91 +178,116 @@ export function App() {
         <p className="speech" role="status">
           {speech.line}
         </p>
-        <div className="top-actions">
-          <button type="button" className="btn" onClick={() => locate(true)}>
-            Find me
-          </button>
-          <button type="button" className="btn" onClick={() => setCityOpen(true)}>
-            Cities
-          </button>
-          <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
-            Tank
-          </button>
-        </div>
       </header>
-      <div className="fuelbar" role="radiogroup" aria-label="Fuel grade">
-        {FUELS.map((item) => {
-          const published = home?.grades[item.id];
-          const comparable =
-            published && rates ? convert(published.perLitre, published.currency, compare, rates.rates) : null;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="radio"
-              aria-checked={fuel === item.id}
-              className={fuel === item.id ? "is-on" : ""}
-              title={item.hint}
-              onClick={() => setFuel(item.id)}
-            >
-              <strong>{item.label}</strong>
-              <small>{comparable == null ? item.hint : `${formatUnit(comparable, compare)}/L avg`}</small>
+      <Fold
+        className="fold-controls"
+        title="Fuel & tank"
+        open={controlsOpen}
+        desktop={desktop}
+        onOpenChange={setControlsOpen}
+      >
+        <div className="controls-body">
+          <div className="top-actions">
+            <button type="button" className="btn" onClick={() => locate(true)}>
+              Find me
             </button>
-          );
-        })}
-      </div>
+            <button type="button" className="btn" onClick={() => setCityOpen(true)}>
+              Cities
+            </button>
+            <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
+              Tank
+            </button>
+          </div>
+          <div className="fuelbar" role="radiogroup" aria-label="Fuel grade">
+            {FUELS.map((item) => {
+              const published = home?.grades[item.id];
+              const comparable =
+                published && rates ? convert(published.perLitre, published.currency, compare, rates.rates) : null;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={fuel === item.id}
+                  className={fuel === item.id ? "is-on" : ""}
+                  title={item.hint}
+                  onClick={() => setFuel(item.id)}
+                >
+                  <strong>{item.label}</strong>
+                  <small>{comparable == null ? item.hint : `${formatUnit(comparable, compare)}/L avg`}</small>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Fold>
       <main className="stage">
-        <MapView
-          shapes={shapes}
-          countries={prices?.countries ?? []}
-          rates={rates?.rates ?? null}
-          fuel={fuel}
-          origin={origin}
-          ranked={ranked}
-          hunting={hunting}
-          selectedId={selectedId}
-          pinMode={pinMode}
-          reducedMotion={reducedMotion}
-          compareCurrency={compare}
-          layoutKey={`${sheetOpen}-${settingsOpen}-${cityOpen}`}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setSheetOpen(true);
-          }}
-          onDrop={(lat, lon) => {
-            setPinMode(false);
-            setOrigin({ lat, lon, label: "Dropped pin", via: "pin" });
-            toast("Pin dropped. If a pump is nearby, it can no longer hide.");
-          }}
-          onCountry={(code) => {
-            const shape = shapes.find((item) => item.code === code);
-            if (!shape) return;
-            setPinMode(false);
-            setOrigin({
-              lat: shape.pin.lat,
-              lon: shape.pin.lon,
-              label: `${shape.pin.place} · ${shape.name}`,
-              via: "country",
-            });
-            toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
-          }}
-        />
-        <Sheet
-          open={sheetOpen}
-          onToggle={() => setSheetOpen((open) => !open)}
-          sort={sort}
-          onSort={setSort}
-          fuel={fuel}
-          settings={settings}
-          compareCurrency={compare}
-          ranked={ranked}
-          stations={stations}
-          loading={loadingStations}
-          error={stationError}
-          home={home}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
+        <Fold
+          className="fold-map"
+          title="Map"
+          open={mapOpen}
+          desktop={desktop}
+          onOpenChange={setMapOpen}
+        >
+          <MapView
+            shapes={shapes}
+            countries={prices?.countries ?? []}
+            rates={rates?.rates ?? null}
+            fuel={fuel}
+            origin={origin}
+            ranked={ranked}
+            hunting={hunting}
+            selectedId={selectedId}
+            pinMode={pinMode}
+            reducedMotion={reducedMotion}
+            compareCurrency={compare}
+            layoutKey={`${desktop}-${mapOpen}-${listOpen}-${controlsOpen}-${settingsOpen}-${cityOpen}`}
+            onSelect={(id) => {
+              setSelectedId(id);
+              revealList();
+            }}
+            onDrop={(lat, lon) => {
+              setPinMode(false);
+              setOrigin({ lat, lon, label: "Dropped pin", via: "pin" });
+              toast("Pin dropped. If a pump is nearby, it can no longer hide.");
+            }}
+            onCountry={(code) => {
+              const shape = shapes.find((item) => item.code === code);
+              if (!shape) return;
+              setPinMode(false);
+              setOrigin({
+                lat: shape.pin.lat,
+                lon: shape.pin.lon,
+                label: `${shape.pin.place} · ${shape.name}`,
+                via: "country",
+              });
+              toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
+            }}
+          />
+        </Fold>
+        <Fold
+          className="fold-list"
+          title="The clever list"
+          open={listOpen}
+          desktop={desktop}
+          onOpenChange={setListOpen}
+          detailsRef={listRef}
+        >
+          <Sheet
+            sort={sort}
+            onSort={setSort}
+            fuel={fuel}
+            settings={settings}
+            compareCurrency={compare}
+            ranked={ranked}
+            stations={stations}
+            loading={loadingStations}
+            error={stationError}
+            home={home}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        </Fold>
       </main>
       <footer className="credits">
         <details className="sources">
@@ -268,9 +308,8 @@ export function App() {
               <a href="https://postcodes.io">postcodes.io</a> (ONS data, OGL).
             </p>
             <p>
-              Map © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ©{" "}
-              <a href="https://carto.com/attributions">CARTO</a>. Country shapes and capitals: Natural Earth. National
-              averages are not pumps.
+              Map © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Country shapes
+              and capitals: Natural Earth. National averages are not pumps.
             </p>
           </div>
         </details>
@@ -320,6 +359,57 @@ export function App() {
       />
     </div>
   );
+}
+
+function Fold(props: {
+  className: string;
+  title: string;
+  open: boolean;
+  desktop: boolean;
+  onOpenChange: (open: boolean) => void;
+  detailsRef?: Ref<HTMLDetailsElement>;
+  children: ReactNode;
+}) {
+  function onToggle(event: ToggleEvent<HTMLDetailsElement>): void {
+    if (props.desktop) {
+      event.currentTarget.open = true;
+      return;
+    }
+    props.onOpenChange(event.currentTarget.open);
+  }
+
+  return (
+    <details
+      ref={props.detailsRef}
+      className={`fold ${props.className}`}
+      open={props.desktop || props.open}
+      onToggle={onToggle}
+    >
+      <summary
+        onClick={(event) => {
+          if (props.desktop) event.preventDefault();
+        }}
+        onKeyDown={(event) => {
+          if (props.desktop && (event.key === "Enter" || event.key === " ")) event.preventDefault();
+        }}
+      >
+        {props.title}
+        <span className="fold-state" aria-hidden="true" />
+      </summary>
+      <div className="fold-body">{props.children}</div>
+    </details>
+  );
+}
+
+function useDesktop(): boolean {
+  const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 980px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 980px)");
+    const onChange = () => setDesktop(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return desktop;
 }
 
 function useReducedMotion(): boolean {
