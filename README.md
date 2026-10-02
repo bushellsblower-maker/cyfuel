@@ -29,10 +29,10 @@ npm run build
 
 - Leaflet map with OpenStreetMap standard tiles (no API key), cartoon pump markers, and a world choropleth of national averages (coloured in EUR per litre, scale trimmed to the middle 80% so one wild price does not paint the planet one colour). **Colour by price** is on by default and can be switched off; the map and list then use one cartoon colour.
 - Scope chips: 5 km, 15 km, 50 km, country, or world. A local radius ranks nearby pumps and hides the world choropleth. Country and world keep national averages. Country station pins are the ones we can fetch within 80 km that still sit in that country.
-- Browser geolocation, with a city list or a dropped pin if permission is denied.
+- Browser geolocation, with a city list or a dropped pin if permission is denied. A city or a dropped pin becomes “here” immediately, and the map and list reload pumps for the scope you already picked (5, 15 or 50 km; country and world stay as they were). If that radius is empty, Pip says so.
 - Real forecourts where an open feed exists. Everywhere else, a capital pin labelled as a **national average — not a pump**.
 - Petrol, premium, diesel, premium diesel, and LPG when a source publishes it.
-- Pump prices in the local currency. Totals can be compared in the currency under your pin, or in another currency via OpenVan's euro rates.
+- A display currency on Fuel & tank (and in the tank notebook). It starts as the currency of the country under you, and stays on whatever you pick. Station prices, totals, and country averages are shown in that currency using OpenVan's free euro rates. A pump's own sticker is still mentioned when it differs.
 - Prices that were published per gallon are converted to per litre for the maths, and the original unit is still mentioned.
 - A Metric / Imperial toggle for the tank and thirst. Imperial is **UK**: imperial gallons and UK mpg (not US mpg). The efficient-fill maths stays in litres and L/100km.
 - “What do you drive?” asks Workers AI (`@cf/meta/llama-3.2-3b-instruct` on the `AI` binding) for a usable tank and, when it knows, a combined L/100km. The 3B instruct model is on the same free catalog as the 8B fp8 model and usually answers faster; the 8B call sometimes never came back. The Worker checks the JSON, gives up after 12 seconds, and the page gives up after 15.

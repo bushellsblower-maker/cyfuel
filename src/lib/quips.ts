@@ -3,6 +3,7 @@ import { winner, type RankedStation } from "../../shared/rank";
 import type { CarTankEstimate } from "../../shared/carTank";
 import { formatTank, formatThirst } from "../../shared/units";
 import type { UnitSystem } from "../../shared/units";
+import type { Scope } from "./settings";
 
 export type Mood = "wave" | "pump" | "bargain" | "clever" | "ouch" | "hunt";
 
@@ -15,6 +16,8 @@ export function mascotLine(input: {
   compareCurrency: string;
   fuelLabel: string;
   scope: "5" | "15" | "50" | "country" | "world";
+  placeLabel?: string;
+  inScopeCount?: number;
 }): { mood: Mood; line: string } {
   if (input.booting) {
     return { mood: "pump", line: "Hold my nozzle. I'm inhaling a planet's worth of price lists." };
@@ -30,11 +33,13 @@ export function mascotLine(input: {
     return { mood: "pump", line: "Pumping nearby prices… the hose is doing its best." };
   }
   if (!input.ranked.length) {
-    const where = input.homeName ? ` in ${input.homeName}` : "";
-    return {
-      mood: "hunt",
-      line: `No open ${input.fuelLabel.toLowerCase()} pumps${where}. The country colour is an average — we're still hunting local nozzles.`,
-    };
+    if ((input.inScopeCount ?? 0) > 0) {
+      return {
+        mood: "hunt",
+        line: `No open ${input.fuelLabel.toLowerCase()} pumps in this scope. Try another grade — the hose has opinions.`,
+      };
+    }
+    return { mood: "hunt", line: emptyScopeLine(input.scope, input.placeLabel || input.homeName || "here", false) };
   }
   const best = winner(input.ranked, "efficient");
   const cheap = winner(input.ranked, "cheapest");
@@ -66,6 +71,21 @@ export function mascotLine(input: {
     return { mood: "ouch", line: "These pumps look very pleased with themselves. The clever one is merely the least cheeky." };
   }
   return { mood: "bargain", line: "This is the efficient fill: tank plus the fuel you spend arriving." };
+}
+
+export function emptyScopeLine(scope: Scope, place: string, uncovered: boolean): string {
+  const where = place || "this spot";
+  if (scope === "world") {
+    return "World view is national averages. Pick 5, 15 or 50 km when you want actual nozzles.";
+  }
+  if (scope === "country") {
+    return uncovered
+      ? `Pip searched ${where} and there is no open pump feed. The colour is a national average, not a nozzle.`
+      : `Pip searched ${where} and the nozzles hid. The colour is a national average.`;
+  }
+  return uncovered
+    ? `No open pump feed within ${scope} km of ${where}. Pip can only offer the national average here.`
+    : `Pip sniffed ${scope} km around ${where} and the nozzles hid. Widen the scope, or this patch only has a national average.`;
 }
 
 export function pipTankLine(estimate: CarTankEstimate, units: UnitSystem): string {

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { FUELS } from "../../shared/fuels";
 import { unitCaption } from "../../shared/fuels";
+import { convert } from "../../shared/money";
 import { winner, type RankedStation } from "../../shared/rank";
 import type { CountryPrice, FuelId, RankMode, StationsPayload } from "../../shared/types";
 import { formatTank, formatThirst } from "../../shared/units";
 import { priceColor, scaleDomain } from "../lib/color";
 import { formatKm, formatLitres, formatMoney, formatUnit } from "../lib/format";
-import { cardQuip } from "../lib/quips";
+import { cardQuip, emptyScopeLine } from "../lib/quips";
 import type { Scope, Settings } from "../lib/settings";
 
 const MODES: Array<{ id: RankMode; label: string }> = [
@@ -24,7 +25,10 @@ type Props = {
   scope: Scope;
   compareCurrency: string;
   ranked: RankedStation[];
+  inScopeCount: number;
+  placeLabel: string;
   stations: StationsPayload | null;
+  rates: Record<string, number> | null;
   loading: boolean;
   error: string | null;
   home: CountryPrice | null;
@@ -47,6 +51,9 @@ export function Sheet(props: Props) {
   const best = winner(props.ranked, "efficient");
   const visible = expanded ? props.ranked : props.ranked.slice(0, 8);
   const homeGrade = props.home?.grades[props.fuel];
+  const homeInDisplay =
+    homeGrade && props.rates ? convert(homeGrade.perLitre, homeGrade.currency, props.compareCurrency, props.rates) : null;
+  const uncovered = props.stations != null && props.stations.regions.length === 0;
   const priceScale = props.colourByPrice ? scaleDomain(props.ranked.map((row) => row.unitPrice)) : null;
   const scopeLine =
     props.scope === "world"
@@ -80,7 +87,8 @@ export function Sheet(props: Props) {
       </p>
       {homeGrade && props.home ? (
         <p className="avg-line">
-          {props.home.name} average for {fuel?.label.toLowerCase()}: {formatUnit(homeGrade.perLitre, homeGrade.currency)}
+          {props.home.name} average for {fuel?.label.toLowerCase()}:{" "}
+          {formatUnit(homeInDisplay ?? homeGrade.perLitre, homeInDisplay == null ? homeGrade.currency : props.compareCurrency)}
           /L
           {homeGrade.unit === "liter"
             ? ". "
@@ -89,7 +97,7 @@ export function Sheet(props: Props) {
             ? "Shrink the scope when you want nozzles instead of averages."
             : props.ranked.length
               ? "The cards below are real pumps."
-              : "Not a pump — we're still hunting local nozzles."}
+              : "Not a pump — the figure above is a national average."}
         </p>
       ) : null}
       {props.scope === "world" && !props.loading ? (
@@ -97,10 +105,10 @@ export function Sheet(props: Props) {
       ) : null}
       {props.loading ? <p className="status-line">Pumping nearby prices…</p> : null}
       {props.error ? <p className="status-line warn">{props.error}</p> : null}
-      {props.scope !== "world" && props.stations?.note && !props.ranked.length && !props.loading ? (
-        <p className="hunt-card">{props.stations.note}</p>
+      {props.scope !== "world" && !props.loading && !props.error && props.stations && props.inScopeCount === 0 && !props.ranked.length ? (
+        <p className="hunt-card">{emptyScopeLine(props.scope, props.placeLabel, uncovered)}</p>
       ) : null}
-      {props.scope !== "world" && !props.loading && props.stations && props.stations.stations.length > 0 && !props.ranked.length ? (
+      {props.scope !== "world" && !props.loading && props.inScopeCount > 0 && !props.ranked.length ? (
         <p className="hunt-card">
           Pumps are nearby, but none published {fuel?.label.toLowerCase()}. Try another grade — the hose has opinions.
         </p>
@@ -149,10 +157,12 @@ export function Sheet(props: Props) {
                 </span>
                 <span className="station-price">
                   <b>
-                    {formatUnit(station.localUnitPrice, station.currency)}
+                    {formatUnit(station.unitPrice, props.compareCurrency)}
                     <small>/L</small>
                   </b>
-                  {sameMoney ? null : <small>{formatUnit(station.unitPrice, props.compareCurrency)}/L</small>}
+                  {sameMoney ? null : (
+                    <small>Sticker {formatUnit(station.localUnitPrice, station.currency)}/L</small>
+                  )}
                   <span>All-in {formatMoney(station.total, props.compareCurrency)}</span>
                 </span>
               </button>

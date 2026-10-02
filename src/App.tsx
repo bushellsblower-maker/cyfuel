@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref, type ToggleEvent } from "react";
-import { haversineKm } from "../shared/geo";
 import { FUELS } from "../shared/fuels";
 import { convert } from "../shared/money";
 import { rankStations, sortRanked } from "../shared/rank";
@@ -12,9 +11,10 @@ import { Mascot } from "./components/Mascot";
 import { Sheet } from "./components/Sheet";
 import { getPrices, getRates, getStations, lookupCar } from "./lib/api";
 import { countryAt, countryShapes } from "./lib/country";
-import { formatUnit } from "./lib/format";
+import { COMPARE_CURRENCIES, displayCurrency } from "./lib/currencies";
+import { currencyLabel, formatUnit } from "./lib/format";
 import { mascotLine, pipTankLine } from "./lib/quips";
-import { fetchRadiusKm, SCOPES, usePreferences } from "./lib/settings";
+import { fetchRadiusKm, insideScope, SCOPES, usePreferences } from "./lib/settings";
 
 type Toast = { id: string; message: string };
 
@@ -45,6 +45,7 @@ export function App() {
   const [tankFresh, setTankFresh] = useState(false);
   const listRef = useRef<HTMLDetailsElement>(null);
   const flashTimer = useRef<number | null>(null);
+  const placeTicket = useRef(0);
   const desktop = useDesktop();
 
   useEffect(() => {
@@ -81,13 +82,16 @@ export function App() {
       return;
     }
     const controller = new AbortController();
+    setStations(null);
+    setStationError(null);
+    setLoadingStations(true);
+    setSelectedId(null);
+    const here = origin;
     const timer = window.setTimeout(() => {
-      setLoadingStations(true);
-      setStationError(null);
-      getStations(origin.lat, origin.lon, fetchKm, controller.signal)
+      getStations(here.lat, here.lon, fetchKm, controller.signal)
         .then((payload) => {
+          if (controller.signal.aborted) return;
           setStations(payload);
-          setSelectedId(null);
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
@@ -105,18 +109,14 @@ export function App() {
 
   const here = origin ? countryAt(origin.lat, origin.lon, shapes) : null;
   const home = here ? (prices?.countries.find((country) => country.code === here.code) ?? null) : null;
-  const compare =
-    settings.compareCurrency === "standing" ? (home?.currency ?? "EUR") : settings.compareCurrency;
+  const compare = displayCurrency(settings.compareCurrency, home?.currency);
 
   const scopedStations = useMemo(() => {
-    if (!origin || !stations || settings.scope === "world") return [];
+    if (!origin || !stations) return [];
     return stations.stations.filter((station) => {
-      if (settings.scope === "country") {
-        if (!here) return true;
-        const code = countryAt(station.lat, station.lon, shapes)?.code ?? null;
-        return code == null || code === here.code;
-      }
-      return haversineKm(origin, station) <= Number(settings.scope) + 0.2;
+      const code = countryAt(station.lat, station.lon, shapes)?.code ?? null;
+      const same = here && code ? code === here.code : code == null ? null : false;
+      return insideScope(origin, station, settings.scope, same);
     });
   }, [here, origin, settings.scope, shapes, stations]);
 
@@ -134,6 +134,8 @@ export function App() {
     compareCurrency: compare,
     fuelLabel: FUELS.find((item) => item.id === fuel)?.label ?? "Fuel",
     scope: settings.scope,
+    placeLabel: origin?.label,
+    inScopeCount: scopedStations.length,
   });
 
   function toast(message: string): void {
@@ -144,14 +146,30 @@ export function App() {
     }, 4800);
   }
 
+  function claimPlace(): number {
+    placeTicket.current += 1;
+    return placeTicket.current;
+  }
+
+  function rememberPlace(next: MapOrigin): void {
+    claimPlace();
+    setPinMode(false);
+    setOrigin(next);
+    setSelectedId(null);
+    revealList();
+  }
+
   function locate(manual: boolean): void {
+    const ticket = claimPlace();
     if (!navigator.geolocation) {
+      if (placeTicket.current !== ticket) return;
       setCityOpen(true);
       toast("This browser has no sense of place. Pick a city and I'll cope.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (placeTicket.current !== ticket) return;
         setPinMode(false);
         setOrigin({
           lat: position.coords.latitude,
@@ -162,6 +180,7 @@ export function App() {
         if (manual) toast("Got you. Let's see who is being reasonable.");
       },
       () => {
+        if (placeTicket.current !== ticket) return;
         setCityOpen(true);
         toast("Location stayed shy. Pick a city or drop a pin — I won't tell.");
       },
@@ -282,6 +301,23 @@ export function App() {
               Imperial
             </button>
           </div>
+          <label className="field currency-field">
+            <span>
+              Display currency
+              {settings.compareCurrency === "standing" ? ` · ${compare}, follows where you stand` : ` · ${compare}`}
+            </span>
+            <select
+              aria-label="Display currency"
+              value={settings.compareCurrency}
+              onChange={(event) => setSettings({ compareCurrency: event.target.value })}
+            >
+              {COMPARE_CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {currencyLabel(code)}
+                </option>
+              ))}
+            </select>
+          </label>
           <p className={`unit-note${tankFresh ? " is-fresh" : ""}`}>
             {settings.units === "imperial" ? "Tank (gal)" : "Tank (L)"} {formatTank(settings.tankLitres, settings.units)}
             {" · "}
@@ -366,23 +402,21 @@ export function App() {
               revealList();
             }}
             onDrop={(lat, lon) => {
-              setPinMode(false);
-              setOrigin({ lat, lon, label: "Dropped pin", via: "pin" });
-              toast("Pin dropped. If a pump is nearby, it can no longer hide.");
+              rememberPlace({ lat, lon, label: "Dropped pin", via: "pin" });
+              toast("Pin dropped. Pumps in this scope, or Pip admits the radius is empty.");
             }}
             onCountry={(code) => {
               const shape = shapes.find((item) => item.code === code);
               if (!shape) return;
-              setPinMode(false);
-              setOrigin({
+              rememberPlace({
                 lat: shape.pin.lat,
                 lon: shape.pin.lon,
                 label: `${shape.pin.place} · ${shape.name}`,
                 via: "country",
               });
-            toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
-            setSettings({ scope: "country" });
-          }}
+              toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
+              setSettings({ scope: "country" });
+            }}
           />
         </Fold>
         <Fold
@@ -402,7 +436,10 @@ export function App() {
             scope={settings.scope}
             compareCurrency={compare}
             ranked={ranked}
+            inScopeCount={scopedStations.length}
+            placeLabel={origin?.label ?? here?.name ?? "here"}
             stations={stations}
+            rates={rates?.rates ?? null}
             loading={loadingStations}
             error={stationError}
             home={home}
@@ -470,8 +507,8 @@ export function App() {
         onClose={() => setCityOpen(false)}
         onPick={(city) => {
           setCityOpen(false);
-          setPinMode(false);
-          setOrigin({ lat: city.lat, lon: city.lon, label: `${city.name}, ${city.country}`, via: "city" });
+          rememberPlace({ lat: city.lat, lon: city.lon, label: `${city.name}, ${city.country}`, via: "city" });
+          toast(`${city.name} is here now. Pumps follow the ${settings.scope === "5" || settings.scope === "15" || settings.scope === "50" ? `${settings.scope} km` : settings.scope} scope.`);
         }}
         onDropMode={() => {
           setCityOpen(false);

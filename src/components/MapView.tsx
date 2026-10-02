@@ -127,8 +127,12 @@ export function MapView(props: Props) {
         const code = String(feature.properties?.code ?? "");
         const shape = byCode.get(code);
         const price = prices.get(code);
+        const shown =
+          price != null && props.rates ? convert(price, "EUR", props.compareCurrency, props.rates) : null;
         const label = shape
-          ? `${shape.name}${price == null ? " · no published price" : ` · ${formatUnit(price, "EUR")}/L average`}`
+          ? `${shape.name}${
+              shown == null ? " · no published price" : ` · ${formatUnit(shown, props.compareCurrency)}/L average`
+            }`
           : code;
         leafletLayer.bindTooltip(label, { sticky: true });
         leafletLayer.on("click", (event) => {
@@ -162,7 +166,7 @@ export function MapView(props: Props) {
       dots.remove();
       dotsRef.current = null;
     };
-  }, [props.colourByPrice, props.countries, props.focusCode, props.fuel, props.rates, props.scope, props.shapes]);
+  }, [props.colourByPrice, props.compareCurrency, props.countries, props.focusCode, props.fuel, props.rates, props.scope, props.shapes]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -274,7 +278,14 @@ export function MapView(props: Props) {
             <span>Pricier</span>
             {wide && domain ? (
               <small>
-                {formatUnit(domain.lo, "EUR")}–{formatUnit(domain.hi, "EUR")}/L · national averages
+                {(() => {
+                  const lo = props.rates ? convert(domain.lo, "EUR", props.compareCurrency, props.rates) : null;
+                  const hi = props.rates ? convert(domain.hi, "EUR", props.compareCurrency, props.rates) : null;
+                  if (lo == null || hi == null) {
+                    return `${formatUnit(domain.lo, "EUR")}–${formatUnit(domain.hi, "EUR")}/L · national averages`;
+                  }
+                  return `${formatUnit(lo, props.compareCurrency)}–${formatUnit(hi, props.compareCurrency)}/L · national averages`;
+                })()}
               </small>
             ) : localDomain ? (
               <small>

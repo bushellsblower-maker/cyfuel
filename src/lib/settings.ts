@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FuelId } from "../../shared/types";
+import { haversineKm } from "../../shared/geo";
+import type { FuelId, LatLng } from "../../shared/types";
 import type { UnitSystem } from "../../shared/units";
 
 export const SCOPES = [
@@ -41,6 +42,16 @@ export function fetchRadiusKm(scope: Scope): number | null {
   if (scope === "5" || scope === "15" || scope === "50") return Number(scope);
   if (scope === "country") return 80;
   return null;
+}
+
+/**
+ * Whether a pump belongs in the current scope around `origin`.
+ * `inSameCountry` is null when the pump's country could not be resolved; those stay in a country search.
+ */
+export function insideScope(origin: LatLng, point: LatLng, scope: Scope, inSameCountry: boolean | null): boolean {
+  if (scope === "world") return false;
+  if (scope === "country") return inSameCountry !== false;
+  return haversineKm(origin, point) <= Number(scope) + 0.2;
 }
 
 const STORAGE_KEY = "cyfuel-settings-v1";
