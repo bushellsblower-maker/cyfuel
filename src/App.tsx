@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref, type ToggleEvent } from "react";
+import { haversineKm } from "../shared/geo";
 import { FUELS } from "../shared/fuels";
 import { convert } from "../shared/money";
 import { rankStations, sortRanked } from "../shared/rank";
@@ -12,7 +13,7 @@ import { getPrices, getRates, getStations } from "./lib/api";
 import { countryAt, countryShapes } from "./lib/country";
 import { formatUnit } from "./lib/format";
 import { mascotLine } from "./lib/quips";
-import { usePreferences } from "./lib/settings";
+import { fetchRadiusKm, SCOPES, usePreferences } from "./lib/settings";
 
 type Toast = { id: string; message: string };
 
@@ -65,13 +66,20 @@ export function App() {
     locate(false);
   }, [bootError, booting, origin]);
 
+  const fetchKm = fetchRadiusKm(settings.scope);
+
   useEffect(() => {
-    if (!origin) return;
+    if (!origin || fetchKm == null) {
+      setStations(null);
+      setStationError(null);
+      setLoadingStations(false);
+      return;
+    }
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoadingStations(true);
       setStationError(null);
-      getStations(origin.lat, origin.lon, settings.radiusKm, controller.signal)
+      getStations(origin.lat, origin.lon, fetchKm, controller.signal)
         .then((payload) => {
           setStations(payload);
           setSelectedId(null);
@@ -88,29 +96,39 @@ export function App() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [origin, settings.radiusKm]);
+  }, [fetchKm, origin]);
 
   const here = origin ? countryAt(origin.lat, origin.lon, shapes) : null;
   const home = here ? (prices?.countries.find((country) => country.code === here.code) ?? null) : null;
   const compare =
     settings.compareCurrency === "standing" ? (home?.currency ?? "EUR") : settings.compareCurrency;
 
+  const scopedStations = useMemo(() => {
+    if (!origin || !stations || settings.scope === "world") return [];
+    return stations.stations.filter((station) => {
+      if (settings.scope === "country") {
+        if (!here) return true;
+        const code = countryAt(station.lat, station.lon, shapes)?.code ?? null;
+        return code == null || code === here.code;
+      }
+      return haversineKm(origin, station) <= Number(settings.scope) + 0.2;
+    });
+  }, [here, origin, settings.scope, shapes, stations]);
+
   const ranked = useMemo(() => {
-    if (!origin || !rates || !stations) return [];
-    return sortRanked(
-      rankStations(stations.stations, origin, fuel, settings, rates.rates, compare),
-      sort,
-    );
-  }, [compare, fuel, origin, rates, settings, sort, stations]);
+    if (!origin || !rates || settings.scope === "world") return [];
+    return sortRanked(rankStations(scopedStations, origin, fuel, settings, rates.rates, compare), sort);
+  }, [compare, fuel, origin, rates, scopedStations, settings, sort]);
 
   const speech = mascotLine({
     booting,
     hasOrigin: Boolean(origin),
-    loading: loadingStations,
+    loading: loadingStations && settings.scope !== "world",
     ranked,
     homeName: home?.name ?? here?.name ?? null,
     compareCurrency: compare,
     fuelLabel: FUELS.find((item) => item.id === fuel)?.label ?? "Fuel",
+    scope: settings.scope,
   });
 
   function toast(message: string): void {
@@ -147,7 +165,7 @@ export function App() {
   }
 
   const hunting =
-    !loadingStations && ranked.length === 0 && here
+    settings.scope === "country" && !loadingStations && ranked.length === 0 && here
       ? { lat: here.pin.lat, lon: here.pin.lon, label: `${here.pin.place} · national average, not a pump` }
       : null;
 
@@ -198,6 +216,28 @@ export function App() {
               Tank
             </button>
           </div>
+          <div className="scopebar" role="radiogroup" aria-label="How far to look">
+            {SCOPES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={settings.scope === item.id}
+                className={settings.scope === item.id ? "is-on" : ""}
+                onClick={() => setSettings({ scope: item.id })}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`btn${settings.colourByPrice ? " is-on" : ""}`}
+            aria-pressed={settings.colourByPrice}
+            onClick={() => setSettings({ colourByPrice: !settings.colourByPrice })}
+          >
+            Colour by price
+          </button>
           <div className="fuelbar" role="radiogroup" aria-label="Fuel grade">
             {FUELS.map((item) => {
               const published = home?.grades[item.id];
@@ -241,6 +281,9 @@ export function App() {
             pinMode={pinMode}
             reducedMotion={reducedMotion}
             compareCurrency={compare}
+            scope={settings.scope}
+            colourByPrice={settings.colourByPrice}
+            focusCode={here?.code ?? null}
             layoutKey={`${desktop}-${mapOpen}-${listOpen}-${controlsOpen}-${settingsOpen}-${cityOpen}`}
             onSelect={(id) => {
               setSelectedId(id);
@@ -261,8 +304,9 @@ export function App() {
                 label: `${shape.pin.place} · ${shape.name}`,
                 via: "country",
               });
-              toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
-            }}
+            toast(`Hopped to ${shape.pin.place}. Local pumps if we have them — otherwise just the average.`);
+            setSettings({ scope: "country" });
+          }}
           />
         </Fold>
         <Fold
@@ -278,6 +322,8 @@ export function App() {
             onSort={setSort}
             fuel={fuel}
             settings={settings}
+            colourByPrice={settings.colourByPrice}
+            scope={settings.scope}
             compareCurrency={compare}
             ranked={ranked}
             stations={stations}

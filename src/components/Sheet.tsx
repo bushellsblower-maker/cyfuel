@@ -3,9 +3,10 @@ import { FUELS } from "../../shared/fuels";
 import { unitCaption } from "../../shared/fuels";
 import { winner, type RankedStation } from "../../shared/rank";
 import type { CountryPrice, FuelId, RankMode, StationsPayload } from "../../shared/types";
+import { priceColor, scaleDomain } from "../lib/color";
 import { formatKm, formatLitres, formatMoney, formatUnit } from "../lib/format";
 import { cardQuip } from "../lib/quips";
-import type { Settings } from "../lib/settings";
+import type { Scope, Settings } from "../lib/settings";
 
 const MODES: Array<{ id: RankMode; label: string }> = [
   { id: "efficient", label: "Efficient fill" },
@@ -18,6 +19,8 @@ type Props = {
   onSort: (mode: RankMode) => void;
   fuel: FuelId;
   settings: Settings;
+  colourByPrice: boolean;
+  scope: Scope;
   compareCurrency: string;
   ranked: RankedStation[];
   stations: StationsPayload | null;
@@ -43,9 +46,16 @@ export function Sheet(props: Props) {
   const best = winner(props.ranked, "efficient");
   const visible = expanded ? props.ranked : props.ranked.slice(0, 8);
   const homeGrade = props.home?.grades[props.fuel];
+  const priceScale = props.colourByPrice ? scaleDomain(props.ranked.map((row) => row.unitPrice)) : null;
+  const scopeLine =
+    props.scope === "world"
+      ? "world averages"
+      : props.scope === "country"
+        ? "this country"
+        : `${props.scope} km around the pin`;
 
   return (
-    <section className="sheet" aria-label="Station ranking" aria-busy={props.loading}>
+    <section className={`sheet${props.colourByPrice ? "" : " is-plain"}`} aria-label="Station ranking" aria-busy={props.loading}>
       <div className="modes" role="tablist" aria-label="How to sort pumps">
         {MODES.map((mode) => (
           <button
@@ -62,7 +72,7 @@ export function Sheet(props: Props) {
       </div>
       <p className="assumptions">
         {props.settings.tankLitres.toFixed(0)} L tank · {props.settings.litresPer100km.toFixed(1)} L/100km ·{" "}
-        {props.settings.roundTrip ? "there and back" : "one way"} · totals in {props.compareCurrency}
+        {props.settings.roundTrip ? "there and back" : "one way"} · {scopeLine} · totals in {props.compareCurrency}
       </p>
       {homeGrade && props.home ? (
         <p className="avg-line">
@@ -71,15 +81,22 @@ export function Sheet(props: Props) {
           {homeGrade.unit === "liter"
             ? ". "
             : ` (published as ${formatUnit(homeGrade.published, homeGrade.currency)}/${unitCaption(homeGrade.unit)}). `}
-          {props.ranked.length ? "The cards below are real pumps." : "Not a pump — we're still hunting local nozzles."}
+          {props.scope === "world"
+            ? "Shrink the scope when you want nozzles instead of averages."
+            : props.ranked.length
+              ? "The cards below are real pumps."
+              : "Not a pump — we're still hunting local nozzles."}
         </p>
+      ) : null}
+      {props.scope === "world" && !props.loading ? (
+        <p className="hunt-card">World view shows national averages and hides the pump confetti.</p>
       ) : null}
       {props.loading ? <p className="status-line">Pumping nearby prices…</p> : null}
       {props.error ? <p className="status-line warn">{props.error}</p> : null}
-      {props.stations?.note && !props.ranked.length && !props.loading ? (
+      {props.scope !== "world" && props.stations?.note && !props.ranked.length && !props.loading ? (
         <p className="hunt-card">{props.stations.note}</p>
       ) : null}
-      {!props.loading && props.stations && props.stations.stations.length > 0 && !props.ranked.length ? (
+      {props.scope !== "world" && !props.loading && props.stations && props.stations.stations.length > 0 && !props.ranked.length ? (
         <p className="hunt-card">
           Pumps are nearby, but none published {fuel?.label.toLowerCase()}. Try another grade — the hose has opinions.
         </p>
@@ -96,7 +113,20 @@ export function Sheet(props: Props) {
                 onClick={() => props.onSelect(station.id)}
                 aria-pressed={selected}
               >
-                <span className="rank-no">{index + 1}</span>
+                <span
+                  className="rank-no"
+                  style={
+                    priceScale
+                      ? {
+                          background: priceColor(
+                            (station.unitPrice - priceScale.lo) / (priceScale.hi - priceScale.lo),
+                          ),
+                        }
+                      : undefined
+                  }
+                >
+                  {index + 1}
+                </span>
                 <span className="station-copy">
                   <strong>{station.name}</strong>
                   <small>{station.address || station.brand}</small>
