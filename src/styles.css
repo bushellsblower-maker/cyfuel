@@ -115,6 +115,8 @@ a { color: var(--sea); }
 .fold:not([open]) .fold-state::after { content: "Show"; }
 .fold-body { padding: 0 12px 12px; }
 .controls-body { display: grid; gap: 8px; }
+.controls-body .currency-field { margin: 0; }
+.controls-body .currency-field select { width: 100%; }
 .scopebar { display: flex; flex-wrap: wrap; gap: 6px; }
 .scopebar button { white-space: nowrap; }
 .unit-note { margin: 0; font-size: 0.86rem; font-weight: 800; line-height: 1.35; border-radius: 10px; }

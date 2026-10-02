@@ -1,33 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { CITIES } from "../data/cities";
+import { COMPARE_CURRENCIES } from "../lib/currencies";
 import { currencyLabel } from "../lib/format";
 import type { Settings } from "../lib/settings";
 import { lPer100kmToUkMpg, litresToUkGallons, ukGallonsToLitres, ukMpgToLPer100km } from "../../shared/units";
-
-const COMPARE = [
-  "standing",
-  "GBP",
-  "EUR",
-  "USD",
-  "AUD",
-  "CAD",
-  "CHF",
-  "JPY",
-  "INR",
-  "NZD",
-  "SEK",
-  "NOK",
-  "DKK",
-  "PLN",
-  "CZK",
-  "HUF",
-  "TRY",
-  "BRL",
-  "MXN",
-  "ZAR",
-  "CNY",
-  "SGD",
-];
 
 export function Modal({
   open,
@@ -141,19 +117,23 @@ export function SettingsDialog({
       </button>
       <p className="field-help">The pump does not teleport you home. Switch this on when you have to come back.</p>
       <label className="field">
-        <span>Compare totals in</span>
+        <span>Display currency</span>
         <select
+          aria-label="Display currency"
           value={settings.compareCurrency}
           onChange={(event) => onChange({ compareCurrency: event.target.value })}
         >
-          {COMPARE.map((code) => (
+          {COMPARE_CURRENCIES.map((code) => (
             <option key={code} value={code}>
               {currencyLabel(code)}
             </option>
           ))}
         </select>
       </label>
-      <p className="field-help">Pump stickers stay in their own currency. The ranking uses this one so a pound and a euro can share a ruler.</p>
+      <p className="field-help">
+        Where I'm standing follows the country under the pin. Pick a currency to keep it. Prices on the map and in the
+        list use that currency, via the free euro rates already loaded. The same picker sits on Fuel & tank.
+      </p>
       <p className="version-stamp">v1 · 2 Oct 2026</p>
     </Modal>
   );
