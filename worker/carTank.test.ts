@@ -88,6 +88,17 @@ describe("POST /api/car-tank", () => {
     expect(binding.calls()).toBe(2);
   });
 
+  it("returns a Saab tank when the model will not write JSON", async () => {
+    const response = await worker.fetch(post("2008 Saab"), env("I like cars."), ctx);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      tankLitres: 61,
+      efficiencyLPer100km: 8.5,
+      confidence: "medium",
+      notes: BROCHURE_NOTE,
+    });
+  });
+
   it("uses a known brochure when both replies waffle", async () => {
     const binding = env("The Ford Focus has a decent tank, about fifty litres.");
     const response = await worker.fetch(post("Ford Focus"), binding, ctx);
