@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n worker,web \"wrangler dev --port 8787 --inspector-port 0\" \"vite --host 127.0.0.1 --port 5173\"",
-    "predev": "mkdir -p dist",
+    "predev": "mkdir -p dist && node scripts/write-version.mjs",
+    "prebuild": "node scripts/write-version.mjs",
+    "predeploy": "node scripts/write-version.mjs",
+    "pretest": "node scripts/write-version.mjs",
+    "pretypecheck": "node scripts/write-version.mjs",
     "build": "wrangler types && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.node.json --noEmit && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",

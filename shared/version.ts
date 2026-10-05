@@ -1,1 +1,1 @@
-export const APP_VERSION = "v1 · 2 Oct 2026";
+export { APP_VERSION, CYBUSH_BUILT } from "./version.generated";

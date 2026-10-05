@@ -4,7 +4,8 @@ import { haversineKm } from "../shared/geo";
 import { normalizePrices, normalizeRates } from "../shared/normalize";
 import { fuelWideSlug, stationFromFuelWide, stationFromUk } from "../shared/stations";
 import type { Station, StationsPayload } from "../shared/types";
-import { APP_VERSION } from "../shared/version";
+import { APP_VERSION, CYBUSH_BUILT } from "../shared/version";
+import { recordAuditHit } from "../src/lib/audit-hit";
 
 /** 3B instruct is on the same free Workers AI catalog and answers quicker than 8B fp8, which sometimes never resolved. */
 export const CAR_MODEL = "@cf/meta/llama-3.2-3b-instruct";
@@ -23,52 +24,90 @@ const ATTRIBUTION = {
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    const url = new URL(request.url);
-    if (!url.pathname.startsWith("/api/")) {
-      return new Response(null, { status: 404 });
-    }
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders() });
-    }
-    if (request.method === "POST" && url.pathname === "/api/car-tank") {
-      return lookupCarTank(request, env, ctx);
-    }
-    if (request.method !== "GET") {
-      return json({ error: "The nozzle only pours GET requests." }, 405, 0);
-    }
-
-    try {
-      if (url.pathname === "/api/health") {
-        return json({ ok: true, version: env.APP_VERSION || APP_VERSION }, 200, 60);
-      }
-      if (url.pathname === "/api/prices") {
-        return cached(request, ctx, 6 * 60 * 60, loadPrices);
-      }
-      if (url.pathname === "/api/rates") {
-        return cached(request, ctx, 6 * 60 * 60, loadRates);
-      }
-      if (url.pathname === "/api/stations") {
-        const lat = numberParam(url, "lat");
-        const lon = numberParam(url, "lon");
-        if (lat == null || lon == null || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-          return json({ error: "I need a real lat and lon. The map is not a suggestion." }, 400, 0);
-        }
-        const radiusKm = clamp(numberParam(url, "radiusKm") ?? 12, 1, 80);
-        return cached(request, ctx, 15 * 60, () => loadStations(lat, lon, radiusKm));
-      }
-      return json({ error: "That path is not a pump." }, 404, 0);
-    } catch (error) {
-      console.log(
-        JSON.stringify({
-          event: "api_error",
-          path: url.pathname,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
-      return json({ error: "The pumps hiccuped. Try again in a moment." }, 502, 0);
-    }
+    recordAuditHit(request, env, ctx);
+    return withVersion(await route(request, env, ctx));
   },
 } satisfies ExportedHandler<Env>;
+
+async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(request.url);
+  if (request.method === "GET" && url.pathname === "/__version") {
+    return versionResponse(env);
+  }
+  if (!url.pathname.startsWith("/api/")) {
+    return env.ASSETS.fetch(request);
+  }
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }
+  if (request.method === "POST" && url.pathname === "/api/car-tank") {
+    return lookupCarTank(request, env, ctx);
+  }
+  if (request.method !== "GET") {
+    return json({ error: "The nozzle only pours GET requests." }, 405, 0);
+  }
+
+  try {
+    if (url.pathname === "/api/health") {
+      return json({ ok: true, version: APP_VERSION }, 200, 60);
+    }
+    if (url.pathname === "/api/prices") {
+      return cached(request, ctx, 6 * 60 * 60, loadPrices);
+    }
+    if (url.pathname === "/api/rates") {
+      return cached(request, ctx, 6 * 60 * 60, loadRates);
+    }
+    if (url.pathname === "/api/stations") {
+      const lat = numberParam(url, "lat");
+      const lon = numberParam(url, "lon");
+      if (lat == null || lon == null || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        return json({ error: "I need a real lat and lon. The map is not a suggestion." }, 400, 0);
+      }
+      const radiusKm = clamp(numberParam(url, "radiusKm") ?? 12, 1, 80);
+      return cached(request, ctx, 15 * 60, () => loadStations(lat, lon, radiusKm));
+    }
+    return json({ error: "That path is not a pump." }, 404, 0);
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        event: "api_error",
+        path: url.pathname,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return json({ error: "The pumps hiccuped. Try again in a moment." }, 502, 0);
+  }
+}
+
+function versionResponse(env: Env): Response {
+  const id = env.CF_VERSION?.id;
+  return new Response(
+    JSON.stringify({
+      app: "cyfuel",
+      sha: APP_VERSION,
+      built: CYBUSH_BUILT,
+      cf_version_id: typeof id === "string" && id ? id : null,
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+function withVersion(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("X-Cybush-Version", APP_VERSION);
+  const bodyless = response.status === 204 || response.status === 205 || response.status === 304;
+  return new Response(bodyless ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 async function lookupCarTank(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const length = Number(request.headers.get("content-length") ?? "0");

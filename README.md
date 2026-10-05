@@ -66,6 +66,6 @@ Pushing to `main` runs `.github/workflows/deploy.yml`:
 
 Deploy is cloud to cloud. Do not publish from a laptop.
 
-The first successful deploy with `custom_domain: true` attaches `cyfuel.cybush.uk` on the `cybush.uk` zone (the token needs Workers Scripts and DNS edit on that zone). `workers_dev` is also enabled, so a `*.workers.dev` hostname is published alongside it.
+The first successful deploy with `custom_domain: true` attaches `cyfuel.cybush.uk` on the `cybush.uk` zone (the token needs Workers Scripts and DNS edit on that zone). `workers_dev` is false, so a `*.workers.dev` hostname is not published.
 
-Version stamp: **v1 · 2 Oct 2026** (footer and the tank notebook).
+Version: curl -sI https://cyfuel.cybush.uk/ | grep x-cybush-version ; /__version

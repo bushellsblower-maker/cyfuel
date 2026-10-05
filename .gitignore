@@ -1,5 +1,6 @@
 node_modules
 dist
+shared/version.generated.ts
 .wrangler
 .dev.vars*
 worker-configuration.d.ts
