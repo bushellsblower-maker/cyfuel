@@ -8,8 +8,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 function seven(value) {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return "";
+  // Workers Builds sets WORKERS_CI_COMMIT_SHA to the branch name ("main") when a
+  // build has no commit hash. Only accept a hex SHA; otherwise fall back to git.
   if (/^[0-9a-f]{7,40}$/i.test(trimmed)) return trimmed.slice(0, 7).toLowerCase();
-  return trimmed.slice(0, 7);
+  return "";
 }
 
 function resolveSha() {
