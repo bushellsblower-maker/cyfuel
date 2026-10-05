@@ -5,6 +5,7 @@ import { currencyLabel } from "../lib/format";
 import type { Settings } from "../lib/settings";
 import { ThirstEditor } from "./ThirstEditor";
 import { litresToUkGallons, ukGallonsToLitres } from "../../shared/units";
+import { APP_VERSION } from "../../shared/version";
 
 export function Modal({
   open,
@@ -118,7 +119,7 @@ export function SettingsDialog({
         Where I'm standing follows the country under the pin. Pick a currency to keep it. Prices on the map and in the
         list use that currency, via the free euro rates already loaded. The same picker sits on Fuel & tank.
       </p>
-      <p className="version-stamp">v1 · 2 Oct 2026</p>
+      <p className="version-stamp">{APP_VERSION}</p>
     </Modal>
   );
 }
